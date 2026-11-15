@@ -1,0 +1,8 @@
+logs/
+__pycache__/
+# generated: engine.py writes the tuning files on every run and builds the
+# derived Surge patches on demand (tools/make_patches.py)
+tuning/
+patches/
+# local settings (server address)
+run_node.env
