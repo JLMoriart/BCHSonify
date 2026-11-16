@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Install or update the relay on the server (idempotent).
-#   - system user `bchsonify`, allowed via sudoers to run two bitcoin-cli
-#     commands as `bitcoin`: getrawmempool (to mark the startup mempool as seen)
-#     and getblockheader (each block's size and size limit)
+#   - system user `bchsonify`, allowed via sudoers to run three read-only
+#     bitcoin-cli commands as `bitcoin`: getrawmempool, getrawmempool true
+#     (waiting transactions and their fees) and getblock (a block's size, size
+#     limit and transaction ids)
 #   - /opt/bchsonify/relay.py + systemd bchsonify-relay.service
 #   - listens on 127.0.0.1:8765 only (not reachable from outside)
 # Server login comes from BCHSONIFY_VPS (env or ../run_node.env).
@@ -17,7 +18,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-zmq python3-websoc
 id bchsonify >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin bchsonify
 cat > /tmp/bchsonify.sudoers <<EOF
 bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getrawmempool
-bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getblockheader *
+bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getrawmempool true
+bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getblock *
 EOF
 visudo -cf /tmp/bchsonify.sudoers >/dev/null
 install -m 440 /tmp/bchsonify.sudoers /etc/sudoers.d/bchsonify
