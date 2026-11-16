@@ -1,7 +1,14 @@
 // The Ferry Line: the mempool as a line of souls waiting for the ferry (visualizer.html).
-// A sketch running on made-up traffic for now; nothing here reads the relay yet.
+// Live: each soul is a transaction waiting in the node's mempool (from the relay), and each
+// ferry takes the transactions of one block. ?source=synthetic runs on made-up traffic instead.
+// Either way the page also plays the sonification (the same Sonifier as index.html) from the same events.
 // Layout: a perspective view inland from the end of a pier. Souls nearer the front of the
 // line are closer and drawn in detail; far ones shrink to single points of light.
+
+import { RelayFeed, relayUrl } from "./feed.js";
+import { CONFIG, SATS_PER_BCH } from "./mapping.js";
+import { Sonifier } from "./sonifier.js";
+import { soundControls } from "./soundstart.js";
 
 const cv = document.getElementById("scene");
 const ctx = cv.getContext("2d");
@@ -16,7 +23,13 @@ const FALL = 1.1, CATCHUP = 4;     // seconds for a new soul to drop in; how fas
 const FERRY_X = 2.4, FERRY_STERN = 4.6, FERRY_LEN = 5.4, FERRY_IN = 1.0, FERRY_OUT = 1.3;
 const LANTERN = [1.9, FERRY_STERN + FERRY_LEN, 2.5];
 const CALL_AT = 1.0, CALL_SPREAD = 1.1; // first soul leaves this long after the block; the rest follow over this long
-const START_SOULS = 2500, ARRIVALS_PER_S = 4, FIRST_BLOCK = 8, BLOCK_EVERY = 45; // made-up traffic
+const START_SOULS = 2500, ARRIVALS_PER_S = 4, FIRST_BLOCK = 8, BLOCK_EVERY = 45; // made-up traffic (?source=synthetic)
+const FERRY_STAY = 0.8;            // seconds the ferry stays docked at least, even with nobody to take
+const UNKNOWN_FEE_RATE = 1;        // sats/byte assumed when the relay couldn't get a transaction's fee
+const LANTERN_FROM = 1e5;          // sats: a soul carries a lantern if its largest output is at least this (0.001 BCH)
+const TOP_SATS = CONFIG.topBch * SATS_PER_BCH; // lantern at its brightest, and a halo, from here up
+const shot = /shot=([\d.]+)/.exec(location.hash), shotAdd = /add=([\d.]+)/.exec(location.hash);
+const synthetic = new URLSearchParams(location.search).get("source") === "synthetic" || !!shot;
 let W = 0, H = 0, DPR = 1, yh = 0, f = 0, bg = null, pier = null, path = null, lanes = [];
 let slots = null, cap = 0, farSlot = 0, pierSlot = 0, farCv = null, farCtx = null, farDirty = true;
 let showLabels = false, lastText = "", frameNo = 0, frozen = false;
@@ -251,12 +264,15 @@ function drawSurf(t) {
   ctx.stroke();
 }
 
-function soulTraits(id) {
-  const amount = hash(id, 1);
+// what a transaction's soul carries (tx: a relay tx event; ones from before the relay started have no outputs)
+function txTraits(tx) {
+  const outs = tx.outputs || [];
+  let max = 0;
+  for (const v of outs) if (v > max) max = v;
   return {
-    lantern: amount > 0.35 ? (amount - 0.35) / 0.65 : 0,
-    bags: Math.min(3, Math.floor(Math.pow(hash(id, 2), 2.2) * 5)),
-    nft: hash(id, 3) < 0.05, ft: hash(id, 4) < 0.09, memo: hash(id, 5) < 0.07, whale: hash(id, 6) < 0.012,
+    lantern: max >= LANTERN_FROM ? clamp(Math.log(max / LANTERN_FROM) / Math.log(TOP_SATS / LANTERN_FROM), 0.05, 1) : 0,
+    bags: clamp(outs.length - 1, 0, 3),
+    nft: !!tx.nft, ft: !!tx.ft, memo: !!tx.memo, whale: max >= TOP_SATS,
   };
 }
 
@@ -357,7 +373,9 @@ function drawSoul(x, y, S, s, t, called) {
 // line[] is front first: highest fee per byte first, equal fees in arrival order.
 // s.p is where a soul is now (in places from the front); its index in line[] is where it belongs.
 // s.st: 0 waiting, 1 dropping in, 2 called by the ferry, 3 flying to it, 4 aboard
+const sonifier = new Sonifier(); // the sound: fed the same events as the line
 const line = [], arrivals = [], flyers = [];
+const byTxid = new Map(), blockQueue = []; // live: the soul of each waiting transaction; blocks not yet shown
 const rnd = mulberry(7);
 let nextId = 1, now = 0, block = null, lastTook = 0, arrivalAcc = 0, nextBlockAt = FIRST_BLOCK;
 
@@ -374,9 +392,24 @@ function randomFee() { // sats per byte: most pay the 1 sat/B minimum
   const r = rnd();
   return r < 0.88 ? 1 : r < 0.97 ? 1 + rnd() : 2 + 48 * rnd() * rnd();
 }
-function addSoul(fee, delay) { // delay < 0: appear in place with no drop
-  const s = { id: nextId++, fee, tr: null, p: 0, st: 0, u: 0, t0: 0, dx: 0, launch: 0, dur: 0, ox: 0, oz: 0, oe: 0, k: 0 };
-  s.tr = soulTraits(s.id);
+// A made-up transaction, shaped like the relay's: 1/2/3/5 outputs weighted 2:8:2:0.5, amounts log-normal
+// around 0.05 BCH (sigma 2.2), like the Synthetic page; 5% hold an NFT, 9% tokens, 7% an OP_RETURN.
+function madeUpTx() {
+  const r = rnd() * 12.5, nOut = r < 2 ? 1 : r < 10 ? 2 : r < 12 ? 3 : 5, outputs = [];
+  for (let i = 0; i < nOut; i++) {
+    const g = Math.sqrt(-2 * Math.log(1 - rnd())) * Math.cos(2 * Math.PI * rnd());
+    outputs.push(Math.max(546, Math.floor(Math.exp(Math.log(0.05) + 2.2 * g) * SATS_PER_BCH)));
+  }
+  return { type: "tx", t: sonifier.serverNow(), txid: `synthetic-${nextId}`, outputs, nft: rnd() < 0.05, ft: rnd() < 0.09, memo: rnd() < 0.07 };
+}
+function addMadeUp(fee, delay, sound) { // sound: also play it (not for the crowd at the start or the 1,000 at once)
+  const tx = madeUpTx();
+  addSoul(fee, delay, tx);
+  if (sound) sonifier.event(tx);
+}
+function addSoul(fee, delay, tx) { // fee: sats per byte; delay < 0: appear in place with no drop; tx: its transaction
+  const s = { id: nextId++, fee, tr: txTraits(tx), txid: tx.txid, p: 0, st: 0, u: 0, t0: 0, dx: 0, launch: 0, dur: 0, ox: 0, oz: 0, oe: 0, k: 0 };
+  byTxid.set(tx.txid, s);
   let lo = 0, hi = line.length;
   while (lo < hi) { const m = (lo + hi) >> 1; if (line[m].fee >= fee) lo = m + 1; else hi = m; }
   line.splice(lo, 0, s);
@@ -386,10 +419,19 @@ function addSoul(fee, delay) { // delay < 0: appear in place with no drop
   return s;
 }
 
-function compact() { // drop everyone who boarded; the rest then close up
+function compact() { // drop everyone who boarded or left; the rest then close up
   let w = 0;
-  for (let i = 0; i < line.length; i++) if (line[i].st < 3) line[w++] = line[i];
+  for (let i = 0; i < line.length; i++) {
+    if (line[i].st < 3) line[w++] = line[i];
+    else byTxid.delete(line[i].txid);
+  }
   line.length = w; farDirty = true;
+}
+function land(s) { // a soul still dropping in is put straight in its place
+  if (s.st !== 1) return;
+  const i = arrivals.indexOf(s);
+  if (i >= 0) arrivals.splice(i, 1);
+  s.st = 0; farDirty = true;
 }
 
 // Made-up miner: mostly the front of the line, skipping ~4% of it, plus ~3% picked from anywhere behind.
@@ -404,7 +446,20 @@ function mineBlock() {
   const picked = new Set();
   for (let k = 0; k < strays && i < waiting.length; k++) picked.add(i + Math.floor(rnd() * (waiting.length - i)));
   [...picked].sort((a, b) => a - b).forEach((j) => chosen.push(waiting[j]));
+  beginBlock(chosen, false);
+  sonifier.event({ type: "block", t: sonifier.serverNow(), hash: `synthetic-${nextId}`, size: chosen.length * 400, limit: 32e6 }); // as if 400 bytes each
+  return true;
+}
+
+// The ferry comes for these souls (front of the line first). unseen: skip the show, they are simply gone.
+function beginBlock(chosen, unseen) {
   const n = chosen.length;
+  for (const s of chosen) land(s);
+  if (unseen) {
+    for (const s of chosen) s.st = 4;
+    compact(); lastTook = n;
+    return;
+  }
   block = { t0: now, phase: "load", chosen, next: 0, aboard: 0, flash: 0, leaveT: 0, tally: null };
   if (reduce) { // no flights: they are simply aboard, and the ferry shows for a moment
     for (const s of chosen) s.st = 4;
@@ -412,8 +467,35 @@ function mineBlock() {
     Object.assign(block, { phase: "leave", next: n, aboard: n, leaveT: now + 2.5 });
   } else chosen.forEach((s, r) => { s.st = 2; s.launch = now + CALL_AT + CALL_SPREAD * (r / n); });
   farDirty = true;
-  return true;
 }
+
+// ---- live: the relay's events ----
+function addTx(tx, delay) {
+  if (tx.confirmed || byTxid.has(tx.txid)) return; // confirmed: it never waited in line
+  addSoul(tx.fee >= 0 && tx.size > 0 ? tx.fee / tx.size : UNKNOWN_FEE_RATE, delay, tx);
+}
+function liveBlock(ev, unseen) {
+  const chosen = [];
+  for (const id of ev.txids || []) { const s = byTxid.get(id); if (s && s.st < 2) chosen.push(s); }
+  for (const id of ev.dropped || []) { // left the mempool without being mined: it just vanishes
+    const s = byTxid.get(id);
+    if (s && s.st < 2) { land(s); s.st = 4; }
+  }
+  chosen.sort((a, b) => a.p - b.p);
+  beginBlock(chosen, unseen);
+  if (!block) compact();
+}
+const liveFeed = {
+  hello(msg) { // (re)connected: start over from the relay's list of waiting transactions
+    line.length = arrivals.length = flyers.length = blockQueue.length = 0;
+    byTxid.clear(); block = null; lastTook = 0; farDirty = true;
+    for (const tx of msg.mempool || []) addTx(tx, -1);
+  },
+  event(ev) {
+    if (ev.type === "tx") addTx(ev, document.hidden ? -1 : 0); // nobody watching: no drop to catch up on later
+    else if (ev.type === "block") blockQueue.push(ev);
+  },
+};
 
 function ferryOffset() { // metres along z: 0 docked, negative out to sea behind the camera
   const b = block;
@@ -423,9 +505,14 @@ function ferryOffset() { // metres along z: 0 docked, negative out to sea behind
 
 function step(dt) {
   now += dt;
-  arrivalAcc += dt * ARRIVALS_PER_S;
-  while (arrivalAcc >= 1) { arrivalAcc -= 1; addSoul(randomFee(), 0); }
-  if (now >= nextBlockAt && mineBlock()) nextBlockAt = now + BLOCK_EVERY;
+  if (synthetic) {
+    arrivalAcc += dt * ARRIVALS_PER_S;
+    while (arrivalAcc >= 1) { arrivalAcc -= 1; addMadeUp(randomFee(), 0, true); }
+    if (now >= nextBlockAt && mineBlock()) nextBlockAt = now + BLOCK_EVERY;
+  } else if (!block && blockQueue.length) { // one ferry at a time; if several blocks piled up, only the last gets the show
+    while (blockQueue.length > 1) liveBlock(blockQueue.shift(), true);
+    liveBlock(blockQueue.shift(), false);
+  }
 
   // everyone not in their place moves toward it
   const k = 1 - Math.exp(-dt * CATCHUP);
@@ -459,7 +546,7 @@ function step(dt) {
       s.u = (now - s.launch) / s.dur;
       if (s.u >= 1) { s.st = 4; flyers.splice(i, 1); b.aboard++; b.flash = Math.min(1, b.flash + 0.25); }
     }
-    if (b.aboard === b.chosen.length) { compact(); b.phase = "leave"; b.leaveT = now + 0.25; }
+    if (b.aboard === b.chosen.length && now >= b.t0 + FERRY_IN + FERRY_STAY) { compact(); b.phase = "leave"; b.leaveT = now + 0.25; }
   } else if (now >= b.leaveT + FERRY_OUT) { lastTook = b.chosen.length; block = null; }
 }
 
@@ -669,15 +756,28 @@ labelsBtn.onclick = () => {
   labelsBtn.textContent = showLabels ? "Hide labels" : "Show labels";
   labelsBtn.setAttribute("aria-pressed", String(showLabels));
 };
-document.getElementById("mine").onclick = () => { if (mineBlock()) nextBlockAt = now + BLOCK_EVERY; };
-document.getElementById("add").onclick = () => { for (let i = 0; i < 1000; i++) addSoul(randomFee(), rnd() * 1.5); };
-document.getElementById("cut").onclick = () => addSoul(5 + 45 * rnd(), 0);
+const feedEl = document.getElementById("feed");
+if (synthetic) {
+  document.getElementById("mine").onclick = () => { if (mineBlock()) nextBlockAt = now + BLOCK_EVERY; };
+  document.getElementById("add").onclick = () => { for (let i = 0; i < 1000; i++) addMadeUp(randomFee(), rnd() * 1.5, false); };
+  document.getElementById("cut").onclick = () => addMadeUp(5 + 45 * rnd(), 0, true);
+  sonifier.hello({ now: Date.now() / 1000, events: [] });
+  for (let i = 0; i < START_SOULS; i++) addMadeUp(randomFee(), -1, false);
+  feedEl.textContent = "made-up traffic";
+} else {
+  for (const id of ["mine", "add", "cut"]) document.getElementById(id).hidden = true; // they only make sense on made-up traffic
+  const both = { // one connection feeds the sound and the line
+    hello(msg) { sonifier.hello(msg); liveFeed.hello(msg); },
+    event(ev) { sonifier.event(ev); liveFeed.event(ev); },
+  };
+  new RelayFeed(relayUrl(), both, (st) => { feedEl.textContent = st; });
+}
+document.getElementById(synthetic ? "about-synthetic" : "about-live").hidden = false;
+if (!shot) soundControls(sonifier, document.getElementById("mute"), document.getElementById("hint")); // start / mute / volume
 
-for (let i = 0; i < START_SOULS; i++) addSoul(randomFee(), -1);
 new ResizeObserver(resize).observe(cv);
 resize();
-// #shot=12.5 freezes the sketch that many seconds in (for checking a moment); &add=3 drops 1,000 souls at 3 s
-const shot = /shot=([\d.]+)/.exec(location.hash), shotAdd = /add=([\d.]+)/.exec(location.hash);
+// #shot=12.5 freezes the made-up traffic that many seconds in (for checking a moment); &add=3 drops 1,000 souls at 3 s
 if (shot) {
   frozen = true;
   for (let t = 0; t < +shot[1]; t += 1 / 30) {

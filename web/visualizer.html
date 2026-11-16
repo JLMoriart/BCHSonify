@@ -45,7 +45,11 @@ dd { margin: 0; color: var(--muted); }
 button { font: 500 13px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
 button:hover { border-color: var(--muted); }
 button:focus-visible { outline: 2px solid var(--soul); outline-offset: 2px; }
-.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#hint { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 16px; }
+a { color: var(--soul); }
+[hidden] { display: none !important; }
 </style>
 <script type="module" src="js/nav.js"></script>
 </head>
@@ -56,9 +60,10 @@ button:focus-visible { outline: 2px solid var(--soul); outline-offset: 2px; }
   <div class="head">
     <div>
       <h1>The Ferry Line</h1>
-      <p class="lede">A moving sketch for the BCHSonify visualizer, running on made-up traffic. Every unconfirmed transaction is a soul waiting in line. When a block is mined, the ferry docks beside the pier and carries that block's souls to eternal life on the chain.</p>
+      <p class="lede">Every unconfirmed Bitcoin Cash transaction is a soul waiting in line. When a block is mined, the ferry docks beside the pier and carries that block's souls to eternal life on the chain. You hear it too: each output plays a harmonic of 30 Hz, and each block sounds the fundamental.</p>
     </div>
     <div class="controls">
+      <button id="mute" type="button">Mute</button>
       <button id="mine" type="button">Mine a block</button>
       <button id="add" type="button">Add 1,000 souls</button>
       <button id="cut" type="button">High-fee soul cuts in</button>
@@ -82,8 +87,8 @@ button:focus-visible { outline: 2px solid var(--soul); outline-offset: 2px; }
     <section>
       <h2>What a soul carries</h2>
       <dl>
-        <dt><span class="sw" style="background:#ffd08a"></span>Lantern</dt><dd>its BCH amount, brighter for bigger outputs</dd>
-        <dt><span class="sw" style="background:#8c5a3c"></span>Luggage</dt><dd>one bag per extra output</dd>
+        <dt><span class="sw" style="background:#ffd08a"></span>Lantern</dt><dd>its largest output: lit from 0.001 BCH, brightest at 2,100 BCH</dd>
+        <dt><span class="sw" style="background:#8c5a3c"></span>Luggage</dt><dd>one bag per extra output, up to three</dd>
         <dt><span class="sw" style="background:#e9c27a"></span>Crown</dt><dd>holds a CashTokens NFT</dd>
         <dt><span class="sw" style="background:#d9b25e"></span>Coin</dt><dd>holds fungible CashTokens</dd>
         <dt><span class="sw" style="background:#efe0bf"></span>Scroll</dt><dd>has an OP_RETURN message</dd>
@@ -91,16 +96,20 @@ button:focus-visible { outline: 2px solid var(--soul); outline-offset: 2px; }
       </dl>
     </section>
     <section>
-      <h2>Stand-ins in this sketch</h2>
-      <p class="muted">The traffic is simulated: 2,500 souls to start, 4 arrivals a second, a block 8 seconds in and every 45 seconds after. Each block takes 30 to 90% of the line: mostly the front, skipping about 4% of it, plus about 3% picked from anywhere behind. Real BCH blocks usually take nearly everyone.</p>
+      <h2>Where it comes from</h2>
+      <p class="muted" id="about-live" hidden>Live from a Bitcoin Cash node. Each soul is a transaction waiting in its mempool, placed by the fee it pays per byte, and each ferry takes exactly the transactions in that block. One that leaves the mempool without being mined just vanishes. A fee the node couldn't report counts as 1 sat per byte, and souls that were already waiting when the relay last started carry nothing. <a href="?source=synthetic">Try it on made-up traffic.</a></p>
+      <p class="muted" id="about-synthetic" hidden>Made-up traffic: 2,500 silent souls to start, 4 arrivals a second (each one sounds), a block 8 seconds in and every 45 seconds after. Each block takes 30 to 90% of the line: mostly the front, skipping about 4% of it, plus about 3% picked from anywhere behind. Real BCH blocks usually take nearly everyone. <a href="visualizer.html">Back to the live line.</a></p>
     </section>
   </div>
 
   <div class="foot">
     <span id="count">Counting souls…</span>
-    <span>Drawn live in canvas to show layout and motion. Not final art.</span>
+    <span id="feed">connecting</span>
+    <span>Not final art.</span>
   </div>
 </main>
+
+<div id="hint" hidden>Click anywhere for sound</div>
 
 <script type="module" src="js/visualizer.js"></script>
 </body>

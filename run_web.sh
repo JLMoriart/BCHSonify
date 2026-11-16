@@ -7,6 +7,7 @@
 #   http://localhost:8000/                       live transactions
 #   http://localhost:8000/?source=synthetic      synthetic transactions (no server needed)
 #   http://localhost:8000/workbench.html         block sound workbench
+#   http://localhost:8000/visualizer.html        the mempool as a line of souls (live, with sound)
 #
 # Server login from BCHSONIFY_VPS (env or run_node.env); without it, only the
 # synthetic source works.
