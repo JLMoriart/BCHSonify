@@ -185,10 +185,18 @@ export class Sonifier {
     this.offset = 0;          // server clock - local clock, s
     this.ctx = null;
     this.master = null;
+    this.volume = null;       // master volume (listener setting), after everything else
+    this.volumeDb = 0;
     this.voices = new Map();  // harmonic -> SineVoice | BlockVoice
     this.playing = false;
     this.blockParams = { ...BLOCK_DEFAULTS };
     this.onchange = null;     // UI hook: called when held notes change
+  }
+
+  /** Master volume in dB (0 = as designed). Smoothed over ~30 ms. */
+  setVolume(db) {
+    this.volumeDb = db;
+    if (this.volume) this.volume.gain.setTargetAtTime(dbToAmp(db), this.ctx.currentTime, 0.01);
   }
 
   serverNow() { return Date.now() / 1000 + this.offset; }
@@ -255,6 +263,8 @@ export class Sonifier {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC({ latencyHint: "playback" }); // bigger buffers: less CPU, latency doesn't matter here
+      this.volume = new GainNode(this.ctx, { gain: dbToAmp(this.volumeDb) });
+      this.volume.connect(this.ctx.destination);
     }
     return this.ctx;
   }
@@ -271,7 +281,7 @@ export class Sonifier {
     this.masterFade.segs = [[t, 0, t + FADE_IN, 1, "lin"]];
     this.master.gain.setValueAtTime(0, t);
     this.master.gain.linearRampToValueAtTime(1, t + FADE_IN);
-    this.master.connect(ctx.destination);
+    this.master.connect(this.volume);
     this.space = new Space(ctx, this.master, p);
     this.sines = new GainNode(ctx);
     this.sines.connect(this.master);

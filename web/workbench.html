@@ -78,6 +78,7 @@ import { BLOCK_PARAMS, BLOCK_DEFAULTS, CAVE_SPACE, migrateBlockParams } from "./
 import { CONFIG, blockHold } from "./js/mapping.js";
 import { LAYOUT } from "./js/layout.js";
 import { RelayFeed, SyntheticFeed, relayUrl } from "./js/feed.js";
+import { volumeControl } from "./js/volume.js";
 
 const $ = (id) => document.getElementById(id);
 const KEY = "bchsonify.blockParams";
@@ -178,6 +179,7 @@ syncControls();
 // ---- audio ----
 let muted = false;
 const ctx = s.context();
+volumeControl(s, $("mute")); // master volume, next to Mute
 const ensureAudio = () => ctx.resume().then(() => { if (!muted) s.start(); });
 let n = 0;
 $("startAudio").onclick = () => ensureAudio();
