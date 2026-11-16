@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BCHSonify: The Ferry Line</title>
+<style>
+/* Layout: a full-bleed night scene, then a narrow reading column of notes. One dark look, chosen for the subject. */
+:root {
+  --night: #15132b;
+  --panel: #1d1a39;
+  --ink: #ece6f5;
+  --muted: #aaa3c4;
+  --soul: #cdf4ff;
+  --gold: #e9c27a;
+  --rule: #34305c;
+  --display: "Spectral", Georgia, "Times New Roman", serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fg: var(--ink); --dim: var(--muted); --accent: var(--soul); /* names the shared nav uses */
+  color-scheme: dark;
+}
+html, body { margin: 0; }
+body { background: var(--night); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.6; }
+.scene { position: relative; width: 100%; height: min(56.25vw, 78vh); min-height: 300px; background: var(--night); }
+@media (max-width: 640px) { .scene { height: min(125vw, 82vh); } }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.notes { max-width: 1040px; margin: 0 auto; padding-block: 32px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+.head { display: flex; gap: 16px 24px; align-items: end; justify-content: space-between; flex-wrap: wrap; }
+.head > div { min-width: 0; max-width: 680px; }
+h1 { font-family: var(--display); font-weight: 600; font-size: 34px; line-height: 1.15; margin: 0 0 8px; text-wrap: balance; letter-spacing: 0.005em; }
+.lede { margin: 0; color: var(--ink); font-size: 16px; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px 32px; border-top: 1px solid var(--rule); padding-top: 24px; }
+.cols > section { min-width: 0; }
+h2 { font-family: var(--display); font-weight: 600; font-size: 19px; margin: 0 0 6px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: baseline; }
+dt { font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+dd { margin: 0; color: var(--muted); }
+.sw { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.foot { display: flex; gap: 12px 20px; align-items: center; flex-wrap: wrap; color: var(--muted); font-size: 13px; border-top: 1px solid var(--rule); padding-top: 16px; }
+.foot span { font-variant-numeric: tabular-nums; }
+button { font: 500 13px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--soul); outline-offset: 2px; }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+<script type="module" src="js/nav.js"></script>
+</head>
+<body>
+<div class="scene"><canvas id="scene" aria-label="Night view from the end of a pier, looking inland: a line of glowing wisps stands on the pier, and behind them the line zigzags back across a beach and a desert to the horizon, shrinking to single points of light. New wisps drop in from the sky; when a block is mined a ferry docks beside the pier and the chosen wisps fly into its lantern."></canvas></div>
+
+<main class="notes">
+  <div class="head">
+    <div>
+      <h1>The Ferry Line</h1>
+      <p class="lede">A moving sketch for the BCHSonify visualizer, running on made-up traffic. Every unconfirmed transaction is a soul waiting in line. When a block is mined, the ferry docks beside the pier and carries that block's souls to eternal life on the chain.</p>
+    </div>
+    <div class="controls">
+      <button id="mine" type="button">Mine a block</button>
+      <button id="add" type="button">Add 1,000 souls</button>
+      <button id="cut" type="button">High-fee soul cuts in</button>
+      <button id="labels" type="button" aria-pressed="false">Show labels</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <section>
+      <h2>Waiting</h2>
+      <p>A soul drops in from the sky straight to its place, then stands still. The line is ordered by fee per byte, highest at the front. Equal fees keep their arrival order, so most newcomers join the back.</p>
+    </section>
+    <section>
+      <h2>Cutting in</h2>
+      <p>A soul that pays more lands ahead of everyone paying less. The souls behind it each step back one place, and that is the only time a settled soul moves before a block.</p>
+    </section>
+    <section>
+      <h2>The ferry</h2>
+      <p>On a block the ferry docks and the souls in that block light up gold wherever they stand, front of the line or not. They fly to the ferry's lantern, front first. The gaps stay open until the last one is aboard, then the line closes up at a run.</p>
+    </section>
+    <section>
+      <h2>What a soul carries</h2>
+      <dl>
+        <dt><span class="sw" style="background:#ffd08a"></span>Lantern</dt><dd>its BCH amount, brighter for bigger outputs</dd>
+        <dt><span class="sw" style="background:#8c5a3c"></span>Luggage</dt><dd>one bag per extra output</dd>
+        <dt><span class="sw" style="background:#e9c27a"></span>Crown</dt><dd>holds a CashTokens NFT</dd>
+        <dt><span class="sw" style="background:#d9b25e"></span>Coin</dt><dd>holds fungible CashTokens</dd>
+        <dt><span class="sw" style="background:#efe0bf"></span>Scroll</dt><dd>has an OP_RETURN message</dd>
+        <dt><span class="sw" style="background:#fff1c4"></span>Halo</dt><dd>2,100 BCH or more, the outputs that play harmonic 2</dd>
+      </dl>
+    </section>
+    <section>
+      <h2>Stand-ins in this sketch</h2>
+      <p class="muted">The traffic is simulated: 2,500 souls to start, 4 arrivals a second, a block 8 seconds in and every 45 seconds after. Each block takes 30 to 90% of the line: mostly the front, skipping about 4% of it, plus about 3% picked from anywhere behind. Real BCH blocks usually take nearly everyone.</p>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span id="count">Counting souls…</span>
+    <span>Drawn live in canvas to show layout and motion. Not final art.</span>
+  </div>
+</main>
+
+<script type="module" src="js/visualizer.js"></script>
+</body>
+</html>

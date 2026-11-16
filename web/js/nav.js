@@ -1,10 +1,13 @@
 // Page navigation shared by every page: inserted at the top of <main>.
 // Uses each page's --fg / --dim / --accent colour tokens.
 
+const page = (u) => u.pathname.split("/").pop();
+const isMain = (u) => !["workbench.html", "visualizer.html"].includes(page(u));
 const PAGES = [
-  { label: "Live", href: "./", match: (u) => !u.pathname.endsWith("workbench.html") && u.searchParams.get("source") !== "synthetic" },
-  { label: "Synthetic", href: "./?source=synthetic", match: (u) => !u.pathname.endsWith("workbench.html") && u.searchParams.get("source") === "synthetic" },
-  { label: "Workbench", href: "workbench.html", match: (u) => u.pathname.endsWith("workbench.html") },
+  { label: "Live", href: "./", match: (u) => isMain(u) && u.searchParams.get("source") !== "synthetic" },
+  { label: "Synthetic", href: "./?source=synthetic", match: (u) => isMain(u) && u.searchParams.get("source") === "synthetic" },
+  { label: "Workbench", href: "workbench.html", match: (u) => page(u) === "workbench.html" },
+  { label: "Visualizer", href: "visualizer.html", match: (u) => page(u) === "visualizer.html" },
 ];
 
 const style = document.createElement("style");
