@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BCHSonify</title>
+<style>
+  :root { --bg: #0d0f12; --fg: #d8dde3; --dim: #7d8794; --accent: #8fd18f; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+  .dim { color: var(--dim); }
+  button { font: inherit; color: var(--fg); background: #1c2128; border: 1px solid #333b45;
+    border-radius: 6px; padding: 6px 14px; cursor: pointer; }
+  button:hover { border-color: var(--dim); }
+  #hint { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    background: #1c2128; border: 1px solid #333b45; border-radius: 999px; padding: 6px 16px; }
+  #held { font-family: ui-monospace, monospace; font-size: 13px; word-break: break-word; }
+  .row { display: flex; gap: 12px; align-items: center; margin: 16px 0; flex-wrap: wrap; }
+</style>
+<script type="module" src="js/nav.js"></script>
+</head>
+<body>
+<main>
+  <h1>BCHSonify</h1>
+  <div class="dim">Bitcoin Cash transactions as harmonics of 30 Hz. Bigger outputs play lower and hold longer; each block sounds the fundamental.</div>
+  <div class="row">
+    <button id="mute" type="button">Mute</button>
+    <span id="status" class="dim">connecting</span>
+  </div>
+  <div class="dim">Sounding harmonics</div>
+  <div id="held">–</div>
+</main>
+<div id="hint" hidden>Click anywhere for sound</div>
+
+<script type="module">
+import { Sonifier } from "./js/sonifier.js";
+import { migrateBlockParams } from "./js/blocksound.js";
+import { RelayFeed, SyntheticFeed, relayUrl } from "./js/feed.js";
+
+const $ = (id) => document.getElementById(id);
+const s = new Sonifier();
+const synthetic = new URLSearchParams(location.search).get("source") === "synthetic";
+if (synthetic) { new SyntheticFeed(s, +(new URLSearchParams(location.search).get("rate") || 0.3)); $("status").textContent = "synthetic transactions"; }
+else new RelayFeed(relayUrl(), s, (st) => { $("status").textContent = st; });
+
+s.onchange = () => { const h = s.heldNotes(); $("held").textContent = h.length ? h.map((n) => "h" + n).join(" ") : "–"; };
+
+// Sound starts on its own when the browser allows it; otherwise on the
+// visitor's first click, tap or key press. Either way it fades in (FADE_IN).
+let muted = false;
+const ctx = s.context();
+// the sound settings chosen in the workbench ("Use on main page"); built-in defaults if absent
+const sound = fetch("sound.json", { cache: "no-cache" })
+  .then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
+  .then((p) => s.setBlockParams(migrateBlockParams(p)));
+const begin = () => sound.then(() => { if (!muted && ctx.state === "running" && !s.playing) { s.start(); $("hint").hidden = true; } });
+ctx.onstatechange = begin;
+ctx.resume().catch(() => {});
+setTimeout(() => { if (!s.playing && !muted) $("hint").hidden = false; }, 500);
+const gesture = () => {
+  for (const e of ["pointerdown", "keydown", "touchend"]) window.removeEventListener(e, gesture, true);
+  ctx.resume().then(begin);
+};
+for (const e of ["pointerdown", "keydown", "touchend"]) window.addEventListener(e, gesture, true);
+
+$("mute").onclick = () => {
+  muted = !muted;
+  $("mute").textContent = muted ? "Unmute" : "Mute";
+  if (muted) { s.stop(); setTimeout(() => { if (muted) ctx.suspend(); }, 100); }  // suspended: no audio CPU
+  else ctx.resume().then(begin);
+};
+</script>
+</body>
+</html>

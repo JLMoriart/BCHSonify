@@ -1,0 +1,17 @@
+[Unit]
+Description=BCHSonify relay (node ZMQ -> WebSocket)
+After=bitcoind.service network-online.target
+Wants=bitcoind.service
+
+[Service]
+User=bchsonify
+Group=bchsonify
+ExecStart=/usr/bin/python3 /opt/bchsonify/relay.py --zmq tcp://127.0.0.1:28332 --host 127.0.0.1 --port 8765 --history 1200 --cli "sudo -n -u bitcoin /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn"
+Restart=always
+RestartSec=5
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

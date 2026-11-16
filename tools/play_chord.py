@@ -23,7 +23,7 @@ def main():
     p.add_argument("--lo", type=int, default=1)
     p.add_argument("--hi", type=int, default=e.harmonic_for(546) + e.FIRST_HARMONIC - 1)  # dust limit
     p.add_argument("--seconds", type=float, default=10)
-    p.add_argument("--f0", type=float, default=40.0)
+    p.add_argument("--f0", type=float, default=30.0)
     p.add_argument("--patch", default="Init Sine AT Fade")
     p.add_argument("--level-db", type=float, default=-6.0, help="every note's level, dB (0 = full poly AT)")
     p.add_argument("--phon", type=float, default=80, help="equal-loudness contour, as in engine.py")

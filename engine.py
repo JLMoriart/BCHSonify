@@ -556,7 +556,7 @@ class Engine:
 
 def make_parser():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--f0", type=float, default=40.0, help="fundamental in Hz (default 40)")
+    p.add_argument("--f0", type=float, default=30.0, help="fundamental in Hz (default 30)")
     p.add_argument("--max-hold", type=float, default=1200,
                    help="maxTime: seconds held by outputs >= --top-bch (hold = maxTime*(amount/top)^skew)")
     p.add_argument("--block-hold", type=float, default=300,

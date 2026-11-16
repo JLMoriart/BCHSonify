@@ -6,3 +6,6 @@ tuning/
 patches/
 # local settings (server address)
 run_node.env
+# temporary test pages and their results (headless browser checks)
+web/_*.html
+presets/debug/
