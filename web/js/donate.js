@@ -1,7 +1,7 @@
 // The "Celebrate! / Donate" button in the corner of the scene, and its dialog: donate from a wallet connected
 // with WizardConnect (pick an amount, then sign in the wallet), or with a QR code any BCH wallet can scan.
 // Every donation sends up a firework; the amount picks the sea animal it becomes (fireworks.js).
-import { ANIMALS, FIRST_ANIMAL_SATS } from "./fireworks.js";
+import { ANIMALS, FIRST_ANIMAL_SATS, fireworkTier } from "./fireworks.js";
 
 const AMOUNTS = ANIMALS.map((name, k) => ({ sats: FIRST_ANIMAL_SATS * 2 ** k, name }));
 const btc = (sats) => (sats / 1e8).toFixed(8).replace(/\.?0+$/, "");
@@ -50,13 +50,14 @@ export async function setupDonate(button, dialog) {
   const status = $("#wizStatus"), connectBtn = $("#wizConnect"), pairing = $("#wizPairing"), step2 = $("#wizDonate");
   let session = null, wantSats = AMOUNTS[0].sats;
   const custom = $("#wizCustom");
-  const pickWiz = (sats) => {
-    wantSats = sats;
-    for (const c of $("#wizDonate .amounts").children) c.setAttribute("aria-pressed", String(+c.dataset.sats === sats));
-    custom.value = btc(sats);
+  // light up the firework an amount gets: from its animal's amount up to the next one's (none under 0.001 BCH)
+  const showTier = () => {
+    const k = fireworkTier(wantSats);
+    [...$("#wizDonate .amounts").children].forEach((c, i) => c.setAttribute("aria-pressed", String(i === k)));
   };
+  const pickWiz = (sats) => { wantSats = sats; custom.value = btc(sats); showTier(); };
   chips($("#wizDonate .amounts"), false, pickWiz);
-  custom.oninput = () => { wantSats = Math.round(parseFloat(custom.value) * 1e8) || 0; for (const c of $("#wizDonate .amounts").children) c.setAttribute("aria-pressed", String(+c.dataset.sats === wantSats)); };
+  custom.oninput = () => { wantSats = Math.round(parseFloat(custom.value) * 1e8) || 0; showTier(); };
   pickWiz(wantSats);
   connectBtn.onclick = async () => {
     connectBtn.disabled = true; status.textContent = "Starting…";

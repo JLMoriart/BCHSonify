@@ -9,6 +9,7 @@
 
 import { RelayFeed, relayUrl } from "./feed.js";
 import { ANIMALS, FIRST_ANIMAL_SATS, Fireworks } from "./fireworks.js";
+import { setupAbout } from "./about.js";
 import { setupDonate } from "./donate.js";
 import { CONFIG, SATS_PER_BCH, blockHold } from "./mapping.js";
 import { Sonifier } from "./sonifier.js";
@@ -1451,6 +1452,10 @@ function resize() {
 
 // ---- clicking a soul: its transaction's details ----
 const panel = document.getElementById("soul");
+// the panel: a close-up of the soul (drawn every frame), then its details (rebuilt twice a second)
+const portrait = document.createElement("canvas"), info = document.createElement("div");
+portrait.className = "portrait"; portrait.setAttribute("aria-hidden", "true"); info.className = "info";
+panel.append(portrait, info);
 let picked = null, pickedAt = null, panelText = 0;
 
 // where a soul is on screen: [x, foot y, height in px] for one standing in line, or null.
@@ -1515,22 +1520,39 @@ function fillDetails() {
     rows.push(["Waiting", `${waited ? waited + " · " : ""}place ${place.toLocaleString("en-US")} of ${line.length.toLocaleString("en-US")}`]);
   } else rows.push(["Status", s.st === 2 || s.st === 3 ? "called by the ferry" : s.gone === "dropped" ? "left the mempool without being mined" : "aboard the ferry: in a block"]);
 
-  panel.replaceChildren();
+  info.replaceChildren();
   const head = el("div", null, "head");
   head.append(el("strong", "Transaction"), el("code", madeUp ? "made-up" : `${s.txid.slice(0, 8)}…${s.txid.slice(-8)}`));
   const x = el("button", "×", "close"); x.type = "button"; x.setAttribute("aria-label", "Close"); x.onclick = closeDetails;
   head.append(x);
   const dl = el("dl");
   for (const [k, v] of rows) dl.append(el("dt", k), el("dd", v));
-  panel.append(head, dl);
+  info.append(head, dl);
   if (!madeUp) {
     const a = el("a", "View on bchexplorer.cash ↗");
     a.href = EXPLORER_TX + s.txid; a.target = "_blank"; a.rel = "noopener";
-    panel.append(a);
+    info.append(a);
   }
 }
 function openDetails(s) { picked = s; pickedAt = null; panelText = -1; panel.hidden = false; fillDetails(); }
 function closeDetails() { picked = null; panel.hidden = true; }
+
+// the close-up: the picked soul drawn in full detail (whatever its distance in the scene), sized to fit
+// everything it carries, floating gently as it does in line
+function drawPortrait(t) {
+  const w = portrait.clientWidth, h = portrait.clientHeight;
+  if (!w || !h) return;
+  if (portrait.width !== Math.round(w * DPR) || portrait.height !== Math.round(h * DPR)) { portrait.width = Math.round(w * DPR); portrait.height = Math.round(h * DPR); }
+  const pc = portrait.getContext("2d"), s = picked, k = s.tr.scale;
+  pc.setTransform(1, 0, 0, 1, 0, 0); pc.clearRect(0, 0, portrait.width, portrait.height);
+  pc.globalAlpha = 1; pc.globalCompositeOperation = "source-over";
+  // its extent in soul heights: the body (k tall) with a certificate over its head and a shadow below; from
+  // the dolly or coin on the left to the lantern or sparkler on the right
+  const S = Math.min(h / (1.3 * k + 0.4), w / (0.75 * k + 0.7));
+  const x = w * 0.48, y = h - 0.3 * S + 0.03 * S * Math.sin(t * 1.7 + s.id * 1.3);
+  ctx = pc;
+  try { drawSoul(x, y, S, s, t, s.st === 2); } finally { ctx = mainCtx; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
+}
 
 // every frame: a ring round the picked soul, and the panel beside it. The panel follows the soul's place
 // in line but not its float up and down, and stays put once the soul has left the line.
@@ -1538,6 +1560,7 @@ function showPicked(t) {
   const v = soulScreen(picked, t), still = soulScreen(picked, t, false);
   if (still) pickedAt = still;
   if (now - panelText > 0.5) { panelText = now; fillDetails(); }
+  drawPortrait(t);
   if (!pickedAt) return;
   const [x, y, B] = pickedAt;
   if (v) {
@@ -1617,6 +1640,7 @@ if (!shot) { // sound: the published sound (in the studio: this browser's workbe
 }
 
 setupDonate(document.getElementById("donate"), document.getElementById("give"));
+setupAbout(document.getElementById("about"), document.getElementById("aboutDialog"));
 new ResizeObserver(resize).observe(cv);
 resize();
 // #shot=12.5 freezes the made-up traffic that many seconds in (for checking a moment); &add=3 drops 1,000 souls at 3 s;
@@ -1629,5 +1653,7 @@ if (shot) {
     if (shotFw && Math.abs(t - (+shot[1] - shotFwAgo)) < 1 / 60) for (const v of shotFw[1].split(",")) fireworks.launch(+v, sky);
     step(1 / 30);
   }
+  const shotPick = /pick=(\d+)/.exec(location.hash); // test: open the details of the soul at this place in line
+  if (shotPick && line[+shotPick[1]]) openDetails(line[+shotPick[1]]);
   draw();
 } else requestAnimationFrame(frame);

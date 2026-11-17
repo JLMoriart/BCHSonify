@@ -25,7 +25,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 button:disabled { opacity: 0.5; cursor: default; }
 #hint { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2;
   background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 16px; }
-#soul { position: absolute; z-index: 1; width: min(300px, calc(100% - 16px)); box-sizing: border-box; padding: 10px 12px 12px;
+#soul { position: absolute; z-index: 1; display: flex; gap: 12px; align-items: flex-start; width: min(420px, calc(100% - 16px)); box-sizing: border-box; padding: 10px 12px 12px;
   background: rgba(21,19,43,0.94); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.4); font-size: 13px; }
 #soul .head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 #soul .head code { color: var(--muted); font: 12px ui-monospace, monospace; }
@@ -34,23 +34,27 @@ button:disabled { opacity: 0.5; cursor: default; }
 #soul dt { color: var(--muted); }
 #soul dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 #soul a { color: var(--soul); }
+/* a close-up of the soul, beside its details */
+#soul .portrait { flex: none; width: 108px; height: 140px; border-radius: 6px;
+  background: radial-gradient(ellipse at 50% 62%, rgba(70,84,130,0.35), rgba(70,84,130,0) 70%), rgba(8,10,22,0.55); }
+#soul .info { flex: 1; min-width: 0; }
+@media (max-width: 420px) { #soul .portrait { width: 84px; height: 112px; } }
 [hidden] { display: none !important; }
-/* the donate button, top left of the scene: its words fade between "Celebrate!" and "Donate" */
-.donate { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); z-index: 1;
-  display: grid; padding: 8px 16px; border-radius: 999px; font-weight: 600; letter-spacing: 0.02em;
-  background: rgba(20,27,46,0.72); border-color: rgba(255,214,140,0.55); color: #ffe3ad; backdrop-filter: blur(4px);
-  box-shadow: 0 0 18px rgba(255,200,110,0.18); }
+/* top left of the scene: the "Fireworks!" button (the donation dialog) and "About" */
+.corner { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); z-index: 1;
+  display: flex; gap: 8px; }
+.corner button { padding: 8px 16px; border-radius: 999px; font-weight: 600; letter-spacing: 0.02em;
+  background: rgba(20,27,46,0.72); backdrop-filter: blur(4px); }
+.donate { border-color: rgba(255,214,140,0.55); color: #ffe3ad; box-shadow: 0 0 18px rgba(255,200,110,0.18); }
 .donate:hover { border-color: #ffd68c; }
-.donate span { grid-area: 1 / 1; text-align: center; animation: swap 8s ease-in-out infinite; }
-.donate span + span { animation-delay: -4s; }
-@keyframes swap { 0%, 40% { opacity: 1; } 50%, 90% { opacity: 0; } 100% { opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .donate span { animation: none; } .donate span:first-child { opacity: 0; } }
+.about-btn { border-color: rgba(205,244,255,0.35); color: var(--soul); }
+.about-btn:hover { border-color: var(--soul); }
 /* its dialog */
-dialog.give { width: min(460px, calc(100% - 32px)); box-sizing: border-box; padding: 18px 20px 20px; color: var(--ink);
+dialog.give, dialog.about { width: min(460px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; box-sizing: border-box; padding: 18px 20px 20px; color: var(--ink);
   background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); }
-dialog.give::backdrop { background: rgba(5,8,18,0.6); }
-.give h2 { margin: 0 0 4px; font-size: 18px; }
-.give .close { position: absolute; top: 12px; right: 12px; padding: 0 9px; font-size: 18px; line-height: 26px; }
+dialog.give::backdrop, dialog.about::backdrop { background: rgba(5,8,18,0.6); }
+.give h2, .about h2 { margin: 0 0 4px; font-size: 18px; }
+.give .close, .about .close { position: absolute; top: 12px; right: 12px; padding: 0 9px; font-size: 18px; line-height: 26px; }
 .give .tabs { display: flex; gap: 6px; margin: 12px 0; }
 .give .tabs button { flex: 1; }
 .give .tabs [aria-selected=true] { border-color: var(--soul); color: var(--soul); }
@@ -73,3 +77,9 @@ dialog.give::backdrop { background: rgba(5,8,18,0.6); }
 .sound > button { order: 2; border-radius: 999px; padding: 4px 12px; }
 .sound label.volume input { width: 110px; }
 @media (max-width: 560px) { .sound label.volume { font-size: 0; gap: 0; } .sound label.volume output { display: none; } .sound label.volume input { width: 72px; } }
+/* the About window */
+dialog.about { width: min(580px, calc(100% - 32px)); line-height: 1.55; }
+.about h2 { padding-right: 36px; }
+.about h3 { margin: 18px 0 4px; font-size: 15px; color: var(--soul); }
+.about p { margin: 8px 0 0; }
+@media (max-width: 420px) { .corner { gap: 6px; } .corner button { padding: 6px 11px; } .sound { gap: 6px; padding-left: 8px; } }
