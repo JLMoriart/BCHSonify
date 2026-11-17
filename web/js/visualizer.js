@@ -1429,12 +1429,24 @@ function draw() {
   }
 }
 
+// The scene keeps to the clock in a background tab too, so on coming back there's nothing left to catch up on.
+// A hidden page gets no frames, and its timers run about once a second (as seldom as once a minute after a
+// while). So a timer runs the scene up to now, undrawn, whenever no frame has come for a moment. That is
+// only for the live feed: made-up traffic simply waits. In view, a frame steps at most 0.05 s, so a stall
+// slows the scene for a moment rather than jumping it.
 let lastTs = 0;
 function frame(ts) {
-  step(Math.min(0.05, lastTs ? (ts - lastTs) / 1000 : 0));
-  lastTs = ts;
+  step(clamp(lastTs ? (ts - lastTs) / 1000 : 0, 0, 0.05));
+  lastTs = Math.max(lastTs, ts);
   draw();
   requestAnimationFrame(frame);
+}
+function runUnseen() {
+  const ts = performance.now(), gap = (ts - lastTs) / 1000;
+  if (!lastTs || gap < 0.25) return; // frames are coming
+  const n = Math.ceil(gap / Math.max(0.1, gap / 300)); // steps of 0.1 s, or fewer, longer ones after a long gap
+  for (let i = 0; i < n; i++) step(gap / n);
+  lastTs = ts;
 }
 
 function resize() {
@@ -1667,5 +1679,6 @@ if (shot) {
   draw();
 } else {
   requestAnimationFrame(frame);
+  if (!synthetic) { setInterval(runUnseen, 1000); document.addEventListener("visibilitychange", runUnseen); }
   if (shotPick) setTimeout(() => { if (line[+shotPick[1]]) openDetails(line[+shotPick[1]]); }, 1500);
 }
