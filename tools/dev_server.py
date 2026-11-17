@@ -5,7 +5,7 @@
   PUT    /api/presets/<kind>/<name>   (JSON body) -> saves presets/<kind>/<name>.json
   DELETE /api/presets/<kind>/<name>
   PUT    /api/sound                   (JSON body) -> saves web/sound.json, the
-                                       sound settings the main page loads
+                                       default sound the visualizer loads
 
 Presets live in presets/<kind>/ in the project (outside web/, so they're never
 deployed). Binds 127.0.0.1 only.

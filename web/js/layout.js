@@ -1,7 +1,7 @@
 // How the workbench lays out the sound settings: sections > boxes > settings,
 // with labels that read well in that place. Layout only: the settings
 // themselves (keys, ranges, defaults) live in blocksound.js and waves.js.
-// Any setting missing here still appears, in an "Other" box (see workbench.html).
+// Any setting missing here still appears, in an "Other" box (see workbench.js).
 
 import { DISTANT_BOXES } from "./waves.js";
 

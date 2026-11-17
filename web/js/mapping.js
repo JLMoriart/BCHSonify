@@ -13,7 +13,7 @@ export const CONFIG = {
   maxHold: 1200,       // s, hold for outputs >= topBch: maxHold * (amount/top)^skew
   skew: 0.25,
   blockTarget: 600,    // s, BCH's block interval target; a block holds blockTarget * (size / size limit)^blockSkew
-  blockSkew: 0.5,      // square root: small blocks hold much longer than in proportion
+  blockSkew: 1 / 3,    // cube root: small blocks (the usual case) hold much longer than in proportion
   blockHoldUnknown: 300, // s, the hold for a block that arrives without its size or limit
   levelDb: -6,         // every note starts this far below full level
   floorDb: -48,        // ...and fades (linearly in dB) to this over its hold, then ends

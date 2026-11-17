@@ -4,10 +4,13 @@
 # http://localhost:8000 (plus the workbench's presets, saved in presets/).
 # Ctrl-C stops everything.
 #
-#   http://localhost:8000/                       live transactions
-#   http://localhost:8000/?source=synthetic      synthetic transactions (no server needed)
-#   http://localhost:8000/workbench.html         block sound workbench
-#   http://localhost:8000/visualizer.html        the mempool as a line of souls (live, with sound)
+#   http://localhost:8000/                             the visitors' page: the mempool as a line of
+#                                                      souls, with sound (Mute and Volume only)
+#   http://localhost:8000/studio.html                  the same, with the test controls and the sound
+#                                                      workbench below it
+#   http://localhost:8000/studio.html?source=synthetic the same on made-up traffic (no server needed)
+#   http://localhost:8000/studio.html?source=none      no transactions (for working on the sound)
+# (/visualizer.html and /workbench.html forward to the studio)
 #
 # Server login from BCHSONIFY_VPS (env or run_node.env); without it, only the
 # synthetic source works.
@@ -21,7 +24,7 @@ if [ -n "${BCHSONIFY_VPS:-}" ]; then
   sleep 2
   kill -0 $TUNNEL || { echo "SSH tunnel to the relay failed"; exit 1; }
 else
-  echo "BCHSONIFY_VPS not set: live data unavailable, use ?source=synthetic"
+  echo "BCHSONIFY_VPS not set: live data unavailable, use studio.html?source=synthetic"
 fi
-echo "http://localhost:8000/   http://localhost:8000/workbench.html"
+echo "http://localhost:8000/studio.html (visitors' page: http://localhost:8000/)"
 python3 tools/dev_server.py --port 8000

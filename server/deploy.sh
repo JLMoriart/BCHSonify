@@ -6,13 +6,19 @@
 #     limit and transaction ids)
 #   - /opt/bchsonify/relay.py + systemd bchsonify-relay.service
 #   - listens on 127.0.0.1:8765 only (not reachable from outside)
+#   - watches for donations to web/donate.json's address (--donate), when it has one
 # Server login comes from BCHSONIFY_VPS (env or ../run_node.env).
 set -euo pipefail
 cd "$(dirname "$0")"
 [ -f ../run_node.env ] && . ../run_node.env
 VPS=${BCHSONIFY_VPS:?set BCHSONIFY_VPS=user@host (env or run_node.env)}
 
-scp -q relay.py bchsonify-relay.service "$VPS":/tmp/
+# the service, with --donate added when there's a donation address
+DONATE=$(python3 -c 'import json; print(json.load(open("../web/donate.json"))["address"].strip())')
+python3 -c 'import sys; sys.path.insert(0, "."); import relay; relay.cashaddr_script(sys.argv[1]) if sys.argv[1] else None' "$DONATE" # a typo stops here
+TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+sed "s|^ExecStart=.*|&${DONATE:+ --donate $DONATE}|" bchsonify-relay.service > "$TMP/bchsonify-relay.service"
+scp -q relay.py "$TMP/bchsonify-relay.service" "$VPS":/tmp/
 ssh "$VPS" 'set -e
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq python3-zmq python3-websockets >/dev/null
 id bchsonify >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin bchsonify

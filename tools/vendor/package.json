@@ -1,0 +1,16 @@
+{
+  "name": "bchsonify-vendor",
+  "private": true,
+  "description": "Builds web/vendor/wizardconnect.js (WizardConnect dapp side, libauth, QR codes) with esbuild: npm ci --ignore-scripts && npm run build",
+  "scripts": {
+    "build": "esbuild entry.js --bundle --format=esm --target=es2022 --minify --legal-comments=eof --banner:js=\"/* BCHSonify vendor bundle, built from tools/vendor (npm ci --ignore-scripts && npm run build). Contains @wizardconnect/core and @wizardconnect/dapp (LGPL-3.0-or-later, Whiterun LLC; source: https://gitlab.com/riftenlabs/lib/wizardconnect), @bitauth/libauth (MIT), nostr-tools (Unlicense), @noble/* and @scure/* (MIT), eventemitter3 (MIT), lossless-json (MIT), qrcode-generator (MIT). Rebuild it from that folder to swap any of them. */\" --outfile=../../web/vendor/wizardconnect.js"
+  },
+  "dependencies": {
+    "@wizardconnect/core": "^0.2.10",
+    "@wizardconnect/dapp": "^0.2.7",
+    "qrcode-generator": "^2.0.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}

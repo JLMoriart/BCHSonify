@@ -9,3 +9,6 @@ run_node.env
 # temporary test pages and their results (headless browser checks)
 web/_*.html
 presets/debug/
+
+# vendor build tools (tools/vendor: npm ci --ignore-scripts)
+node_modules/

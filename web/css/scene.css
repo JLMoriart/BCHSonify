@@ -1,0 +1,75 @@
+/* The night scene and what sits on it (the Donate button and its dialog, the sound controls, a soul's details),
+   shared by the visitors' page (index.html) and the studio (studio.html). One dark look, chosen for the subject. */
+:root {
+  --night: #0b1020;
+  --panel: #141b2e;
+  --ink: #e6ebf3;
+  --muted: #9fabc0;
+  --soul: #cdf4ff;
+  --rule: #283350;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fg: var(--ink); --dim: var(--muted); --accent: var(--soul); --line: var(--rule); /* names the volume slider uses */
+  color-scheme: dark;
+}
+html, body { margin: 0; }
+body { background: var(--night); color: var(--ink); font: 14px/1.45 var(--body); }
+/* the scene fills the whole window */
+.scene { position: relative; width: 100%; height: 100vh; height: 100dvh; min-height: 300px; background: var(--night); }
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.dim { color: var(--muted); }
+button, select { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+input[type=number] { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 4px 6px; }
+button.primary { border-color: var(--soul); color: var(--soul); }
+button:hover, select:hover { border-color: var(--muted); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--soul); outline-offset: 2px; }
+button:disabled { opacity: 0.5; cursor: default; }
+#hint { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 16px; }
+#soul { position: absolute; z-index: 1; width: min(300px, calc(100% - 16px)); box-sizing: border-box; padding: 10px 12px 12px;
+  background: rgba(21,19,43,0.94); border: 1px solid var(--rule); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.4); font-size: 13px; }
+#soul .head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+#soul .head code { color: var(--muted); font: 12px ui-monospace, monospace; }
+#soul .close { margin-left: auto; padding: 0 8px; font-size: 16px; line-height: 22px; }
+#soul dl { margin: 0 0 8px; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; }
+#soul dt { color: var(--muted); }
+#soul dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+#soul a { color: var(--soul); }
+[hidden] { display: none !important; }
+/* the donate button, top left of the scene: its words fade between "Celebrate!" and "Donate" */
+.donate { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: max(12px, env(safe-area-inset-left, 0px)); z-index: 1;
+  display: grid; padding: 8px 16px; border-radius: 999px; font-weight: 600; letter-spacing: 0.02em;
+  background: rgba(20,27,46,0.72); border-color: rgba(255,214,140,0.55); color: #ffe3ad; backdrop-filter: blur(4px);
+  box-shadow: 0 0 18px rgba(255,200,110,0.18); }
+.donate:hover { border-color: #ffd68c; }
+.donate span { grid-area: 1 / 1; text-align: center; animation: swap 8s ease-in-out infinite; }
+.donate span + span { animation-delay: -4s; }
+@keyframes swap { 0%, 40% { opacity: 1; } 50%, 90% { opacity: 0; } 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .donate span { animation: none; } .donate span:first-child { opacity: 0; } }
+/* its dialog */
+dialog.give { width: min(460px, calc(100% - 32px)); box-sizing: border-box; padding: 18px 20px 20px; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); }
+dialog.give::backdrop { background: rgba(5,8,18,0.6); }
+.give h2 { margin: 0 0 4px; font-size: 18px; }
+.give .close { position: absolute; top: 12px; right: 12px; padding: 0 9px; font-size: 18px; line-height: 26px; }
+.give .tabs { display: flex; gap: 6px; margin: 12px 0; }
+.give .tabs button { flex: 1; }
+.give .tabs [aria-selected=true] { border-color: var(--soul); color: var(--soul); }
+.give .amounts { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin: 10px 0; }
+.give .amounts button { display: grid; padding: 6px 8px; text-align: left; }
+.give .amounts b { white-space: nowrap; }
+.give .amounts span { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.give .amounts [aria-pressed=true] { border-color: #ffd68c; background: #2a2a3a; }
+.give .qr { display: block; width: 200px; height: 200px; margin: 6px auto; background: #fff; border-radius: 8px; padding: 6px; }
+.give .qr svg { width: 100%; height: 100%; }
+.give .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.give code { font: 12px ui-monospace, monospace; overflow-wrap: anywhere; color: var(--muted); }
+.give a.button { color: var(--ink); text-decoration: none; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; }
+.give .status { min-height: 1.4em; margin: 10px 0 0; color: var(--muted); }
+.give label { display: flex; gap: 8px; align-items: center; }
+/* sound: Mute and Volume, top right of the scene (on the visitors' page) */
+.sound { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 1;
+  display: flex; gap: 10px; align-items: center; padding: 4px 6px 4px 12px; border-radius: 999px;
+  background: rgba(20,27,46,0.72); border: 1px solid var(--rule); backdrop-filter: blur(4px); }
+.sound > button { order: 2; border-radius: 999px; padding: 4px 12px; }
+.sound label.volume input { width: 110px; }
+@media (max-width: 560px) { .sound label.volume { font-size: 0; gap: 0; } .sound label.volume output { display: none; } .sound label.volume input { width: 72px; } }

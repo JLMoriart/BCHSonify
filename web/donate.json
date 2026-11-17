@@ -1,0 +1,4 @@
+{
+  "address": "bitcoincash:qz3rre8t40cksvpshq0h76uthemggwxd95p72eemv6",
+  "note": "The site's BCH donation address (bitcoincash:...). The page's QR codes come from it (tools/make_donate_qr.py), and the relay is started with --donate set to it (server/deploy.sh)."
+}

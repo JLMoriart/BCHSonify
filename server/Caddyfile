@@ -1,0 +1,12 @@
+# BCHSonify's site (installed by deploy_web.sh, which fills in {SITE}): the visitors' page and its files,
+# and the relay's live feed at /ws. Caddy gets and renews the https certificate itself.
+{SITE} {
+	root * /var/www/bchsonify
+	encode zstd gzip
+	reverse_proxy /ws 127.0.0.1:8765
+	file_server
+	# check back on every visit (cheap: unchanged files answer "not modified"), so a deploy shows up at once
+	header Cache-Control "no-cache"
+	header X-Content-Type-Options nosniff
+	header Referrer-Policy strict-origin-when-cross-origin
+}

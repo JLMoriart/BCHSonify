@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spirits of Bitcoin studio</title>
+<link rel="stylesheet" href="css/scene.css">
+<style>
+/* the studio: the scene, then the controls and the sound workbench below it, a scroll away */
+main { max-width: 1040px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 48px max(16px, env(safe-area-inset-left, 0px)); }
+.top { position: sticky; top: 0; z-index: 1; background: var(--night); border-bottom: 1px solid var(--rule); }
+.bar { padding: 8px 0; display: flex; gap: 8px 10px; flex-wrap: wrap; align-items: center; }
+.bar + .bar { border-top: 1px solid var(--rule); }
+.bar .num { font-variant-numeric: tabular-nums; }
+.groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+fieldset { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; margin: 0; padding: 10px 12px 12px; min-width: 0; }
+legend { padding: 0 4px; font-weight: 600; }
+.p { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin-top: 8px; }
+.p input[type=range], .p select { grid-column: 1 / -1; width: 100%; accent-color: var(--soul); }
+.p input[type=checkbox] { grid-column: 1 / -1; justify-self: start; margin: 4px 0 0; accent-color: var(--soul); }
+.val { font-variant-numeric: tabular-nums; color: var(--muted); }
+textarea { width: 100%; box-sizing: border-box; min-height: 140px; margin-top: 8px; background: var(--panel);
+  color: var(--ink); border: 1px solid var(--rule); border-radius: 8px; font: 12px/1.4 ui-monospace, monospace; padding: 8px; }
+details { margin-top: 20px; }
+details.sec { margin-top: 18px; border-top: 1px solid var(--rule); padding-top: 4px; }
+details.sec > summary { cursor: pointer; font-size: 17px; font-weight: 600; padding: 8px 0; list-style-position: inside; }
+details.sec > summary::marker { color: var(--muted); }
+details.sec .groups { margin-top: 4px; align-items: start; }
+</style>
+</head>
+<body>
+<div class="scene"><button id="donate" class="donate" type="button" aria-label="Donate"><span>Celebrate!</span><span>Donate</span></button><div id="soul" role="dialog" aria-label="Transaction details" hidden></div><canvas id="scene" aria-label="Night view from the end of a pier, looking inland: a line of glowing wisps stands on the pier, and behind them the line zigzags back across a beach and a desert to the horizon, shrinking to single points of light. New wisps drop in from the sky; when a block is mined a lantern-lit boat glides in from the right, stops in front of the pier, and the chosen wisps fly into the great lantern at its bow before it glides away to the left."></canvas></div>
+
+<main>
+  <div class="top">
+    <div class="bar">
+      <button id="mute" type="button">Mute</button>
+      <label class="dim">Transactions
+        <select id="source">
+          <option value="live">live</option>
+          <option value="synthetic">made-up</option>
+          <option value="stress">stress test</option>
+          <option value="none">none</option>
+        </select>
+      </label>
+      <span id="feed" class="dim">connecting</span>
+      <span id="count" class="dim num"></span>
+    </div>
+    <div class="bar">
+      <button id="mine" type="button">Mine a block</button>
+      <button id="add" type="button">Add 1,000 souls</button>
+      <button id="cut" type="button">High-fee soul cuts in</button>
+      <button id="strike" class="primary" type="button" title="The block note, and a ferry with nobody to take, both for a block of the size given">Strike block</button>
+      <label class="dim">as a block of <input id="strikeMB" type="number" min="0" max="32" step="0.01" value="16" style="width:5.5em"> MB of the 32 MB limit: holds <span id="strikeHold" class="num"></span></label>
+      <button id="stopBlock" type="button">Stop block</button>
+    </div>
+    <div class="bar" id="fwTest"><span class="dim">Test a firework</span></div>
+    <div class="bar">
+      <label class="dim">Preset <select id="preset"></select></label>
+      <button id="save" type="button">Save</button>
+      <button id="saveAs" type="button">Save as…</button>
+      <button id="del" type="button">Delete</button>
+      <button id="useDefault" type="button">Use as default sound</button>
+      <span id="presetState" class="dim"></span>
+    </div>
+  </div>
+  <div id="sections"></div>
+  <details open>
+    <summary>Current settings as JSON</summary>
+    <textarea id="json" readonly></textarea>
+    <button id="copy" type="button">Copy</button>
+  </details>
+</main>
+
+<div id="hint" hidden>Click anywhere for sound</div>
+
+<dialog id="give" class="give" aria-labelledby="giveTitle">
+  <h2 id="giveTitle">Celebrate with a donation</h2>
+  <div class="dim">Every donation sends up a firework over the mountains. Give more, and it becomes a bigger sea creature.</div>
+  <button class="close" type="button" aria-label="Close">×</button>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="wallet">Connect a wallet</button>
+    <button type="button" role="tab" data-tab="qr">QR code</button>
+  </div>
+  <div data-pane="wallet">
+    <div class="dim">Connect with WizardConnect, choose an amount, then approve it in your wallet.</div>
+    <div class="row"><button id="wizConnect" type="button" class="primary">Connect wallet</button></div>
+    <div id="wizPairing" hidden><div id="wizQr" class="qr"></div><div class="row"><a id="wizOpen" class="button" href="#">Open in a wallet on this device</a></div></div>
+    <div id="wizDonate" hidden>
+      <div class="amounts"></div>
+      <div class="row"><label>Amount <input id="wizCustom" type="number" min="0.00000546" step="0.001" inputmode="decimal" style="width:9em"> BCH</label>
+        <button id="wizSend" type="button" class="primary">Donate</button></div>
+    </div>
+    <p id="wizStatus" class="status" role="status"></p>
+  </div>
+  <div data-pane="qr" hidden>
+    <div class="amounts"></div>
+    <img id="donateQr" class="qr" alt="QR code for the donation">
+    <div class="row"><span id="donateQrAmount" class="dim"></span></div>
+    <div class="row"><code id="donateAddr"></code></div>
+    <div class="row"><button id="donateCopy" type="button">Copy address</button><a id="donateOpen" class="button" href="#">Open in wallet</a></div>
+  </div>
+</dialog>
+<script type="module" src="js/visualizer.js"></script>
+</body>
+</html>

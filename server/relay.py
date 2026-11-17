@@ -5,13 +5,14 @@ Sends raw events only; all sonification and visualization logic lives in the
 browser.
 
   {"type": "tx", "t": <unix s>, "txid": "...", "outputs": [sats, ...], "size": bytes,
-   "fee": sats, "nft": true, "ft": true, "memo": true, "confirmed": true}
+   "fee": sats, "nft": true, "ft": true, "memo": true, "donation": sats, "confirmed": true}
   {"type": "block", "t": <unix s>, "hash": "...", "size": bytes, "limit": bytes,
    "txids": [...], "dropped": [...]}
 
 tx: "fee" is missing when the node couldn't be asked. "nft" / "ft" / "memo"
 appear only when true: an output holds a CashTokens NFT, holds fungible
-CashTokens, or is an OP_RETURN. "confirmed" appears (true) when the transaction
+CashTokens, or is an OP_RETURN. "donation" (with --donate) is how many sats it
+pays to the site's donation address, when that is any. "confirmed" appears (true) when the transaction
 was not in the mempool by the time its fee was looked up: it arrived inside a
 block, or was mined within that moment.
 
@@ -66,11 +67,43 @@ def _varint(b, i):
     return int.from_bytes(b[i + 1:i + 1 + w], "little"), i + 1 + w
 
 
-def parse_tx(raw):
+def cashaddr_script(addr):
+    """The locking script (bytes) a CashAddress pays to: P2PKH, or P2SH (20- or 32-byte), token-aware or not."""
+    charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    prefix, _, payload = addr.lower().rpartition(":")
+    prefix = prefix or "bitcoincash"
+    data = [charset.index(c) for c in payload]
+    c = 1  # checksum (BCH polymod over the prefix's low bits, a 0, then the payload)
+    for d in [ord(ch) & 31 for ch in prefix] + [0] + data:
+        c0, c = c >> 35, ((c & 0x07ffffffff) << 5) ^ d
+        for k, g in enumerate((0x98f2bc8e61, 0x79b76d99e2, 0xf33e5fb3c4, 0xae2eabe2a8, 0x1e4f43e470)):
+            if c0 >> k & 1:
+                c ^= g
+    if c ^ 1:
+        raise ValueError(f"bad CashAddress checksum: {addr}")
+    acc, bits, out = 0, 0, []
+    for d in data[:-8]:  # 5-bit groups -> bytes
+        acc, bits = acc << 5 | d, bits + 5
+        if bits >= 8:
+            bits -= 8
+            out.append(acc >> bits & 0xff)
+    version, h = out[0], bytes(out[1:])
+    kind = version >> 3  # 0 P2PKH, 1 P2SH, 2 P2PKH token-aware, 3 P2SH token-aware
+    if kind in (0, 2) and len(h) == 20:
+        return b"\x76\xa9\x14" + h + b"\x88\xac"
+    if kind in (1, 3) and len(h) == 20:
+        return b"\xa9\x14" + h + b"\x87"
+    if kind in (1, 3) and len(h) == 32:
+        return b"\xaa\x20" + h + b"\x87"
+    raise ValueError(f"unsupported CashAddress: {addr}")
+
+
+def parse_tx(raw, donate=None):
     """(output values in sats, flags) of a serialized BCH transaction.
     Token (CashTokens) outputs count by the BCH they hold; OP_RETURN outputs are 0.
     flags: {"nft": True} / {"ft": True} if any output holds an NFT / fungible
-    tokens, {"memo": True} if any output is an OP_RETURN."""
+    tokens, {"memo": True} if any output is an OP_RETURN, {"donation": sats} for
+    what it pays to the locking script `donate` (bytes), if any."""
     i = 4  # version
     n_in, i = _varint(raw, i)
     for _ in range(n_in):
@@ -95,6 +128,8 @@ def parse_tx(raw):
                 _, j = _varint(raw, j)
         if j < end and raw[j] == 0x6a:  # OP_RETURN (possibly burning tokens)
             flags["memo"] = True
+        if donate and raw[j:end] == donate and values[-1] > 0:
+            flags["donation"] = flags.get("donation", 0) + values[-1]
         i = end
     return values, flags
 
@@ -117,6 +152,7 @@ class Relay:
         self.pending = {}  # txid -> tx event: the waiting transactions
         self.queue = asyncio.Queue()  # events from the node, in order, awaiting their lookups
         self.rest_until = 0.0
+        self.donate = None  # the donation address's locking script (bytes), if watching for donations
 
     def seed(self, mempool):
         """Start from the node's mempool (`getrawmempool true`): already waiting, never announced."""
@@ -262,7 +298,7 @@ class Relay:
                 continue
             self.seen.add(txid)
             try:
-                outs, flags = parse_tx(body)
+                outs, flags = parse_tx(body, self.donate)
             except (IndexError, KeyError):
                 print(f"couldn't parse tx {txid}; skipped", flush=True)
                 continue
@@ -278,10 +314,14 @@ async def main():
                    help="seconds of events sent to new clients; keep >= the longest note hold (default 1200)")
     p.add_argument("--cli", help="bitcoin-cli command prefix, e.g. 'sudo -n -u bitcoin bitcoin-cli -conf=...'; "
                                  "used for getrawmempool [true] and getblock <hash> 1")
+    p.add_argument("--donate", help="the site's donation CashAddress: transactions paying it are marked \"donation\"")
     a = p.parse_args()
 
     cli = shlex.split(a.cli) if a.cli else None
     relay = Relay(a.history, cli)
+    if a.donate:
+        relay.donate = cashaddr_script(a.donate)
+        print(f"relay: watching for donations to {a.donate}", flush=True)
     if cli:
         out = subprocess.run([*cli, "getrawmempool", "true"], capture_output=True, text=True, check=True).stdout
         relay.seed(json.loads(out))

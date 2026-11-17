@@ -1,22 +1,16 @@
-// Starting, muting and volume for a page that plays the sonification
-// (index.html and visualizer.html).
+// Starting, muting and volume for the pages that play the sonification (index.html, studio.html).
 
-import { migrateBlockParams } from "./blocksound.js";
 import { volumeControl } from "./volume.js";
 
-/** Wire `sonifier` to a Mute button (the volume slider goes next to it) and a
- *  "click for sound" hint element. Sound starts on its own when the browser
- *  allows it; otherwise on the visitor's first click, tap or key press. Either
- *  way it fades in. Uses the sound settings chosen in the workbench
- *  (sound.json, "Use on main page"); built-in defaults if absent. */
-export function soundControls(s, muteBtn, hint) {
+/** Wire `sonifier` to a Mute button (the volume slider goes next to it) and a "click for sound" hint
+ *  element. Sound starts on its own when the browser allows it; otherwise on the visitor's first click,
+ *  tap or key press. Either way it fades in, once `ready` (the sound settings) has resolved.
+ *  Returns ensure(): a promise that sound is running (unless muted or the browser still blocks it). */
+export function soundControls(s, muteBtn, hint, ready) {
   let muted = false;
   const ctx = s.context();
   volumeControl(s, muteBtn);
-  const sound = fetch("sound.json", { cache: "no-cache" })
-    .then((r) => (r.ok ? r.json() : {})).catch(() => ({}))
-    .then((p) => s.setBlockParams(migrateBlockParams(p)));
-  const begin = () => sound.then(() => { if (!muted && ctx.state === "running" && !s.playing) { s.start(); hint.hidden = true; } });
+  const begin = () => ready.then(() => { if (!muted && ctx.state === "running" && !s.playing) { s.start(); hint.hidden = true; } });
   ctx.onstatechange = begin;
   ctx.resume().catch(() => {});
   setTimeout(() => { if (!s.playing && !muted) hint.hidden = false; }, 500);
@@ -32,4 +26,5 @@ export function soundControls(s, muteBtn, hint) {
     if (muted) { s.stop(); setTimeout(() => { if (muted) ctx.suspend(); }, 100); }  // suspended: no audio CPU
     else ctx.resume().then(begin);
   };
+  return () => (muted ? Promise.resolve() : ctx.resume().then(begin));
 }
