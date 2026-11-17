@@ -96,7 +96,9 @@ details.sec .groups { margin-top: 4px; align-items: start; }
   <div data-pane="wallet">
     <div class="dim">Connect with WizardConnect, choose an amount, then approve it in your wallet.</div>
     <div class="row"><button id="wizConnect" type="button" class="primary">Connect a wallet</button></div>
-    <div id="wizPairing" hidden><div id="wizQr" class="qr"></div><div class="row"><a id="wizOpen" class="button" href="#">Open in a wallet on this device</a></div></div>
+    <div id="wizPairing" hidden><div id="wizQr" class="qr"></div>
+      <div class="row"><code id="wizUri"></code></div>
+      <div class="row"><button id="wizCopy" type="button">Copy link</button><a id="wizOpen" class="button" href="#">Open in a wallet on this device</a></div></div>
     <div id="wizDonate" hidden>
       <div class="amounts"></div>
       <div class="row"><label>Amount <input id="wizCustom" type="number" min="0.00000546" step="0.001" inputmode="decimal" style="width:9em"> BCH</label>
@@ -104,12 +106,14 @@ details.sec .groups { margin-top: 4px; align-items: start; }
     </div>
     <p id="wizStatus" class="status" role="status"></p>
   </div>
-  <div data-pane="qr" hidden>
+  <div data-pane="qr" class="qrpane" hidden>
+    <div class="qrside">
+      <img id="donateQr" class="qr" alt="QR code for the donation">
+      <div class="row"><span id="donateQrAmount" class="dim"></span></div>
+      <div class="row"><code id="donateAddr"></code></div>
+      <div class="row"><button id="donateCopy" type="button">Copy address</button><a id="donateOpen" class="button" href="#">Open in wallet</a></div>
+    </div>
     <div class="amounts"></div>
-    <img id="donateQr" class="qr" alt="QR code for the donation">
-    <div class="row"><span id="donateQrAmount" class="dim"></span></div>
-    <div class="row"><code id="donateAddr"></code></div>
-    <div class="row"><button id="donateCopy" type="button">Copy address</button><a id="donateOpen" class="button" href="#">Open in wallet</a></div>
   </div>
 </dialog>
 <script type="module" src="js/visualizer.js"></script>

@@ -1661,7 +1661,16 @@ if (!shot) { // sound: the published sound (in the studio: this browser's workbe
   if (studio) start.then((p) => workbench(sonifier, p, ensure, (ev) => testFerry(fullness(ev.size, ev.limit))));
 }
 
-setupDonate(document.getElementById("donate"), document.getElementById("give"));
+// the lowest the sky (above the mountains) comes down between viewport x0 and x1: the donation window stays below it
+const skyBottom = (x0, x1) => {
+  const r = cv.getBoundingClientRect();
+  if (!landTop) return r.top + yh;
+  const at = (x) => clamp(Math.round((x - r.left + 4) / 2), 0, landTop.length - 1);
+  let y = 0;
+  for (let i = at(x0), e = at(x1); i <= e; i++) y = Math.max(y, landTop[i]);
+  return r.top + y;
+};
+setupDonate(document.getElementById("donate"), document.getElementById("give"), skyBottom);
 setupAbout(document.getElementById("about"), document.getElementById("aboutDialog"));
 new ResizeObserver(resize).observe(cv);
 resize();

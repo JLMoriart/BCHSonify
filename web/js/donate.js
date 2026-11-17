@@ -1,5 +1,5 @@
-// The "Celebrate! / Donate" button in the corner of the scene, and its dialog: donate from a wallet connected
-// with WizardConnect (pick an amount, then sign in the wallet), or with a QR code any BCH wallet can scan.
+// The "Fireworks!" button in the corner of the scene, and its window: donate with a QR code any BCH wallet can
+// scan, or from a wallet connected with WizardConnect (pick an amount, then sign in the wallet).
 // Every donation sends up a firework; the amount picks the sea animal it becomes (fireworks.js).
 import { ANIMALS, FIRST_ANIMAL_SATS, fireworkTier } from "./fireworks.js";
 
@@ -7,11 +7,25 @@ const AMOUNTS = ANIMALS.map((name, k) => ({ sats: FIRST_ANIMAL_SATS * 2 ** k, na
 const btc = (sats) => (sats / 1e8).toFixed(8).replace(/\.?0+$/, "");
 const title = (s) => s[0].toUpperCase() + s.slice(1);
 
-export async function setupDonate(button, dialog) {
+// skyBottom(x0, x1): the lowest the sky comes down (viewport y, px) between viewport x0 and x1. The window opens
+// under the button and below that, so it hides none of the sky (where the fireworks go off), and the scene
+// isn't dimmed; it moves up only as far as it must to fit in the window.
+export async function setupDonate(button, dialog, skyBottom = () => 0) {
   let address = "";
   try { address = ((await (await fetch("donate.json", { cache: "no-cache" })).json()).address || "").trim(); } catch { /* none */ }
   const $ = (sel) => dialog.querySelector(sel);
-  button.onclick = () => { dialog.showModal(); };
+  const place = () => {
+    if (!dialog.open) return;
+    const b = button.getBoundingClientRect(), w = dialog.offsetWidth, room = innerHeight - 12;
+    const left = Math.max(12, Math.min(b.left, innerWidth - 12 - w));
+    let top = Math.max(b.bottom + 10, skyBottom(left, left + w) + 4);
+    dialog.style.maxHeight = "none";
+    const h = dialog.offsetHeight;
+    if (top + h > room) top = Math.max(b.bottom + 10, room - h);
+    Object.assign(dialog.style, { left: `${left}px`, top: `${top}px`, maxHeight: `${room - top}px` });
+  };
+  button.onclick = () => { dialog.showModal(); place(); };
+  addEventListener("resize", place);
   $(".close").onclick = () => dialog.close();
   dialog.addEventListener("click", (e) => { if (e.target === dialog) dialog.close(); }); // a click outside it
 
@@ -22,8 +36,9 @@ export async function setupDonate(button, dialog) {
     for (const p of dialog.querySelectorAll("[data-pane]")) p.hidden = p.dataset.pane !== name;
   };
   for (const t of tabs) t.onclick = () => show(t.dataset.tab);
-  show(/give=qr/.test(location.hash) ? "qr" : "wallet");
-  if (/(^|[#&])give\b/.test(location.hash)) dialog.showModal(); // a link straight to it: …/#give
+  show(/give=wallet/.test(location.hash) ? "wallet" : "qr");
+  for (const p of dialog.querySelectorAll("[data-pane]")) new ResizeObserver(place).observe(p); // grown or shrunk: fit it again
+  if (/(^|[#&])give\b/.test(location.hash)) button.onclick(); // a link straight to it: …/#give (or #give=wallet)
 
   if (!address) { // not set up yet: say so rather than show a broken QR code
     for (const p of dialog.querySelectorAll("[data-pane]")) p.innerHTML = '<p class="dim">Donations aren\'t set up yet: there\'s no donation address.</p>';
@@ -40,10 +55,7 @@ export async function setupDonate(button, dialog) {
   };
   chips(qrChips, true, pickQr);
   $("#donateAddr").textContent = address.replace(/^bitcoincash:/, "");
-  $("#donateCopy").onclick = async () => {
-    try { await navigator.clipboard.writeText(address); $("#donateCopy").textContent = "Copied"; } catch { $("#donateCopy").textContent = "Copy failed"; }
-    setTimeout(() => { $("#donateCopy").textContent = "Copy address"; }, 1500);
-  };
+  copyButton($("#donateCopy"), () => address);
   pickQr(AMOUNTS[0].sats);
 
   // ---- WizardConnect: connect, then choose an amount and send it to the wallet to sign
@@ -59,6 +71,7 @@ export async function setupDonate(button, dialog) {
   chips($("#wizDonate .amounts"), false, pickWiz);
   custom.oninput = () => { wantSats = Math.round(parseFloat(custom.value) * 1e8) || 0; showTier(); };
   pickWiz(wantSats);
+  copyButton($("#wizCopy"), () => $("#wizUri").textContent);
   connectBtn.onclick = async () => {
     connectBtn.disabled = true; status.textContent = "Starting…";
     let wizard;
@@ -69,7 +82,7 @@ export async function setupDonate(button, dialog) {
     try {
       session = await wizard.connect({
         name: "Spirits of Bitcoin",
-        pairing: (uri, qrSvg) => { pairing.hidden = false; $("#wizQr").innerHTML = qrSvg; $("#wizOpen").href = uri; status.textContent = "Scan this with your wallet, or open it on this device."; },
+        pairing: (uri, qrSvg) => { pairing.hidden = false; $("#wizQr").innerHTML = qrSvg; $("#wizOpen").href = $("#wizUri").textContent = uri; status.textContent = "Scan this with your wallet, or open it on this device."; },
         status: (text) => { status.textContent = text; },
       });
       pairing.hidden = true; step2.hidden = false; connectBtn.hidden = true;
@@ -82,8 +95,18 @@ export async function setupDonate(button, dialog) {
     try {
       const txid = await session.donate(address, wantSats, (text) => { status.textContent = text; });
       status.textContent = `Sent, thank you! Watch the sky. (${txid.slice(0, 12)}…)`;
+      dialog.close(); // out of the way of the firework (this message is still there if they open it again)
     } catch (e) { status.textContent = `Not sent: ${e.message || e}`; }
     $("#wizSend").disabled = false;
+  };
+}
+
+// a button that copies text(), then says whether it worked for a moment
+function copyButton(b, text) {
+  const label = b.textContent;
+  b.onclick = async () => {
+    try { await navigator.clipboard.writeText(text()); b.textContent = "Copied"; } catch { b.textContent = "Copy failed"; }
+    setTimeout(() => { b.textContent = label; }, 1500);
   };
 }
 
