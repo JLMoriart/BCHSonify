@@ -75,6 +75,7 @@ const shotFw = /fw=([\d,]+)/.exec(location.hash); // test: fireworks for these d
 const shotFwAgo = +(/fwago=([\d.]+)/.exec(location.hash) || [0, 2.3])[1];
 const shotDonors = /donors/.test(location.hash);   // test: every made-up soul is a donor (sparklers everywhere)
 const shotBoat = /boat=([\d.]+)/.exec(location.hash), shotFull = +(/full=([\d.]+)/.exec(location.hash) || [0, 0])[1]; // test: a test boat then, for a block this full
+const shotPick = /pick=(\d+)/.exec(location.hash); // test: open the details of the soul at this place in line (at once in a #shot, else after 1.5 s)
 const shot = /shot=([\d.]+)/.exec(location.hash), shotAdd = /add=([\d.]+)/.exec(location.hash), shotDrop = /drop=([\d.]+)/.exec(location.hash);
 const asked = new URLSearchParams(location.search).get("source");
 const source = shot ? (asked === "stress" ? "stress" : "synthetic") : ["synthetic", "stress", "none"].includes(asked) ? asked : "live";
@@ -1520,13 +1521,21 @@ function fillDetails() {
     rows.push(["Waiting", `${waited ? waited + " · " : ""}place ${place.toLocaleString("en-US")} of ${line.length.toLocaleString("en-US")}`]);
   } else rows.push(["Status", s.st === 2 || s.st === 3 ? "called by the ferry" : s.gone === "dropped" ? "left the mempool without being mined" : "aboard the ferry: in a block"]);
 
+  // Only the text that changed is updated in place: rebuilding the panel would replace its × and link under
+  // the pointer, and a click pressed on one element and released on its replacement is no click at all.
+  const layout = s.id + "|" + rows.map((r) => r[0]).join("|");
+  if (layout === infoLayout) {
+    rows.forEach(([, v], i) => { const dd = infoValues[i]; if (dd.textContent !== v) dd.textContent = v; });
+    return;
+  }
+  infoLayout = layout;
   info.replaceChildren();
   const head = el("div", null, "head");
   head.append(el("strong", "Transaction"), el("code", madeUp ? "made-up" : `${s.txid.slice(0, 8)}…${s.txid.slice(-8)}`));
   const x = el("button", "×", "close"); x.type = "button"; x.setAttribute("aria-label", "Close"); x.onclick = closeDetails;
   head.append(x);
   const dl = el("dl");
-  for (const [k, v] of rows) dl.append(el("dt", k), el("dd", v));
+  infoValues = rows.map(([k, v]) => { const dd = el("dd", v); dl.append(el("dt", k), dd); return dd; });
   info.append(head, dl);
   if (!madeUp) {
     const a = el("a", "View on bchexplorer.cash ↗");
@@ -1534,8 +1543,9 @@ function fillDetails() {
     info.append(a);
   }
 }
+let infoLayout = "", infoValues = []; // what the panel is built for (the soul, and its rows' names), and its values
 function openDetails(s) { picked = s; pickedAt = null; panelText = -1; panel.hidden = false; fillDetails(); }
-function closeDetails() { picked = null; panel.hidden = true; }
+function closeDetails() { picked = null; panel.hidden = true; infoLayout = ""; }
 
 // the close-up: the picked soul drawn in full detail (whatever its distance in the scene), sized to fit
 // everything it carries, floating gently as it does in line
@@ -1653,7 +1663,9 @@ if (shot) {
     if (shotFw && Math.abs(t - (+shot[1] - shotFwAgo)) < 1 / 60) for (const v of shotFw[1].split(",")) fireworks.launch(+v, sky);
     step(1 / 30);
   }
-  const shotPick = /pick=(\d+)/.exec(location.hash); // test: open the details of the soul at this place in line
   if (shotPick && line[+shotPick[1]]) openDetails(line[+shotPick[1]]);
   draw();
-} else requestAnimationFrame(frame);
+} else {
+  requestAnimationFrame(frame);
+  if (shotPick) setTimeout(() => { if (line[+shotPick[1]]) openDetails(line[+shotPick[1]]); }, 1500);
+}
