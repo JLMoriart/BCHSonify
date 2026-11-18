@@ -130,8 +130,12 @@ class SineVoice {
     g.gain = new GainNode(this.ctx, { gain: 0 });
     g.fade = new HoldFade(g.gain.gain);
     g.osc.connect(g.gain).connect(this.out);
-    if (!this.mods) this.startMods();
-    this.mods.out.connect(g.osc.detune);
+    // pitch movement only when there is some: connected, it re-pitches the oscillator every sample (much of
+    // the sound's CPU), even at depth 0. (A note started with none stays still if movement is turned up.)
+    if (this.p.driftDepth > 0 || this.p.noteVibratoDepth > 0) {
+      if (!this.mods) this.startMods();
+      this.mods.out.connect(g.osc.detune);
+    }
     g.osc.start();
     const osc = g.osc;
     osc.onended = () => {
