@@ -85,6 +85,7 @@ const stress = source === "stress", synthetic = source === "synthetic" || stress
 let W = 0, H = 0, DPR = 1, yh = 0, cy = 0, f = 0, bg = null, pier = null, path = null;
 let landTop = null, skyClip = null; // the top of the land (y every 2 px from x = -4), and the sky above it as a clip path
 let slots = null, cap = 0, farZ = 0, farCv = null, farCtx = null, farDirty = true;
+let poolCv = null, poolCtx = null; // the middle distance's lantern light on the ground, repainted with the far souls
 let lastText = "", frameNo = 0, frozen = false, glints = [];
 let gx = 0, gz = 0, sx = 0, sy = 0, sS = 0, wx = 0, wz = 0, we = 0; // scratch outputs, to avoid allocating per soul
 
@@ -524,11 +525,20 @@ function txTraits(tx, rate) {
     lampCss: `rgb(${c.join(",")})`,                                       // ...as a fill colour (the lantern of mid souls)
     litCss: `rgb(${SOUL_BODY.map((v, i) => Math.round(v + (c[i] - v) * LAMP_ON_SMALL)).join(",")})`, // a small soul's body in its light
     glass: `rgb(${c.map((v) => Math.round(v + (255 - v) * 0.55)).join(",")})`, // the lantern itself, paler
+    smallBody: smallBodyCss(c),                                           // a mid soul's body, tinted, in one fill
     bags: Math.max(0, (tx.outputs ? tx.outputs.length : 1) - 1),          // one per extra output
     nft: !!tx.nft, ft: !!tx.ft, memo: !!tx.memo,
     donation: tx.donation > 0 ? tx.donation : 0,                          // sats to the site: a sparkler, not a lantern
     scale: 1 + SIZE_GROWTH * Math.log2(bytes / TYPICAL_BYTES), // bigger transaction, bigger soul
   };
+}
+
+// A small soul's body is its pale fill (SOUL_BODY at 0.88) with its lantern's colour over it at LAMP_ON_SMALL:
+// two fills of one shape, which come to exactly one fill of this colour and opacity (one drawing step, not two).
+const SMALL_BODY_A = 0.88;
+function smallBodyCss(c) {
+  const a = 1 - (1 - SMALL_BODY_A) * (1 - LAMP_ON_SMALL);
+  return `rgba(${SOUL_BODY.map((v, i) => ((v * SMALL_BODY_A * (1 - LAMP_ON_SMALL) + c[i] * LAMP_ON_SMALL) / a).toFixed(2)).join(",")},${a.toFixed(4)})`;
 }
 
 function wisp(sw) {
@@ -630,7 +640,61 @@ function drawSparkler(tr, id, t, B) {
 
 // S: pixels per soul height for a normal-size soul here. Only the body grows with the transaction's size;
 // what it carries stays the same size and moves out to stay in its hands, by its head or beside it.
-function drawSoul(x, y, S, s, t, called) {
+// A full-detail soul's body shading, and its lantern's glow on it: the same for every soul (the glow, for every
+// soul with that lantern colour), so made once for each canvas they're drawn on and reused, not made afresh
+// for every soul in every frame.
+const shades = new WeakMap(); // canvas context -> { body, lamp: colour -> glow }
+function shadesFor() {
+  let sh = shades.get(ctx);
+  if (!sh) {
+    const body = ctx.createLinearGradient(0, -1, 0, 0);
+    body.addColorStop(0, "rgba(242,252,255,0.98)"); body.addColorStop(0.55, "rgba(204,241,255,0.92)"); body.addColorStop(1, "rgba(160,225,255,0)");
+    shades.set(ctx, (sh = { body, lamp: new Map() }));
+  }
+  return sh;
+}
+const bodyShade = () => shadesFor().body;
+const lampAt = (k) => [0.33 + 0.14 / k, -0.47 - 0.265 / k]; // the lantern, in body units, for a body of scale k
+// The body's shading and its lantern's glow painted together, at BODY_RES pixels per soul height, over the
+// area a body covers (BODY_BOX: left, top, width, height, in body units): one fill of the swaying outline
+// with this is the two fills, one over the other. One per lantern colour and size of soul (k, to 0.02).
+const BODY_RES = 96, BODY_BOX = [-0.45, -1.02, 0.9, 1.06];
+function bodyPaint(lamp, k) {
+  const sh = shadesFor(), kq = Math.round(k * 50) / 50, key = lamp + "|" + kq;
+  if (!sh.paint) sh.paint = new Map();
+  let p = sh.paint.get(key);
+  if (p) return p;
+  if (sh.paint.size > 600) sh.paint.clear(); // (a bound; they're cheap to make again)
+  const [x0, y0, w, h] = BODY_BOX, c = document.createElement("canvas");
+  c.width = Math.ceil(w * BODY_RES); c.height = Math.ceil(h * BODY_RES);
+  const main = ctx;
+  ctx = c.getContext("2d");
+  ctx.setTransform(BODY_RES, 0, 0, BODY_RES, -x0 * BODY_RES, -y0 * BODY_RES); // body units
+  ctx.fillStyle = bodyShade(); ctx.fillRect(x0, y0, w, h);
+  const [Lx, Ly] = lampAt(kq);
+  ctx.translate(Lx, Ly); ctx.fillStyle = lampOnBody(lamp); ctx.fillRect(x0 - Lx, y0 - Ly, w, h);
+  ctx = main;
+  p = ctx.createPattern(c, "no-repeat");
+  p.setTransform(new DOMMatrix([1 / BODY_RES, 0, 0, 1 / BODY_RES, x0, y0]));
+  sh.paint.set(key, p);
+  return p;
+}
+function lampOnBody(lamp) {
+  const m = shadesFor().lamp;
+  let g = m.get(lamp);
+  if (!g) {
+    g = ctx.createRadialGradient(0, 0, 0, 0, 0, LAMP_REACH);
+    g.addColorStop(0, `rgba(${lamp},${LAMP_ON_BODY})`); g.addColorStop(0.55, `rgba(${lamp},${LAMP_ON_BODY * 0.45})`); g.addColorStop(1, `rgba(${lamp},0)`);
+    m.set(lamp, g);
+  }
+  return g;
+}
+
+// The parts of a full-detail soul, so the middle distance can stamp the still ones from images (see midSoul):
+// behind the body (shadow, glow, lantern light, luggage), the body and face (it sways; the eyes are the detail
+// that most shows softening), in front (arms, lantern, coin, scroll), and the certificate (it floats).
+const PART_BACK = 1, PART_BODY = 2, PART_FRONT = 4, PART_CERT = 8, PART_ALL = 15;
+function drawSoul(x, y, S, s, t, called, part = PART_ALL) {
   const tr = s.tr, id = s.id, k = tr.scale, B = S * k; // B: pixels per soul height for this body
   const body = () => ctx.setTransform(DPR * B, 0, 0, DPR * B, DPR * x, DPR * y);
   const carried = (ox, oy) => ctx.setTransform(DPR * S, 0, 0, DPR * S, DPR * (x + ox * S), DPR * (y + oy * S)); // shifted by (ox, oy) soul heights
@@ -639,7 +703,7 @@ function drawSoul(x, y, S, s, t, called) {
   const lx = -0.31 * g, ly = -0.48 * g;  // ...the left hand
   const side = -0.3 * g, head = -0.98 * g; // ...the left edge of the body, and the top of the head
   const sw = Math.sin(t * 2.1 + id * 0.9) * 0.08, alpha = ctx.globalAlpha; // alpha: < 1 while fading away
-  if (B < 16) { // mid distance: body, lantern, and a hint of the big things
+  if (B < 16 && part === PART_ALL) { // mid distance: body, lantern, and a hint of the big things
     body();
     if (called) { ctx.fillStyle = "rgba(255,200,110,0.6)"; ctx.beginPath(); ctx.arc(0, -0.6, 0.66, 0, Math.PI * 2); ctx.fill(); }
     if (tr.bags >= DOLLY_FROM) { // the stack on its dolly, as one block
@@ -648,8 +712,12 @@ function drawSoul(x, y, S, s, t, called) {
       ctx.fillStyle = "#7c5a44"; ctx.fillRect(DOLLY_X - 0.16, top, 0.32, ground - top);
       body();
     }
-    wisp(sw); ctx.fillStyle = "rgba(212,245,255,0.88)"; ctx.fill();
-    ctx.globalAlpha *= LAMP_ON_SMALL; ctx.fillStyle = tr.lampCss; ctx.fill(); ctx.globalAlpha = alpha; // in its lantern's light
+    wisp(sw);
+    if (alpha === 1) { ctx.fillStyle = tr.smallBody; ctx.fill(); } // pale, in its lantern's light, as one fill
+    else { // fading away: the two fills (their sum isn't one fill once both are fainter)
+      ctx.fillStyle = `rgba(${SOUL_BODY.join(",")},${SMALL_BODY_A})`; ctx.fill();
+      ctx.globalAlpha *= LAMP_ON_SMALL; ctx.fillStyle = tr.lampCss; ctx.fill(); ctx.globalAlpha = alpha;
+    }
     if (tr.nft) { carried(side, head); ctx.fillStyle = "#f7efd8"; ctx.fillRect(-0.7, -1.28, 0.4, 0.28); }
     carried(rx, ry); ctx.fillStyle = tr.lampCss;
     if (tr.donation) { ctx.fillRect(0.42, -1.0, 0.16, 0.16); ctx.fillStyle = "#fffbe8"; ctx.fillRect(0.47, -0.95, 0.06, 0.06); } // sparkler
@@ -657,6 +725,7 @@ function drawSoul(x, y, S, s, t, called) {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     return;
   }
+  if (part & PART_BACK) {
   carried(0, 0); // shadow on the ground: from above it shows where a floating soul stands
   ctx.fillStyle = "rgba(24,14,34,0.2)"; ctx.beginPath(); ctx.ellipse(0, ground, 0.2 * k, 0.065 * k, 0, 0, Math.PI * 2); ctx.fill();
   body();
@@ -689,24 +758,33 @@ function drawSoul(x, y, S, s, t, called) {
     ctx.fillStyle = "rgba(43,29,20,0.45)"; // two straps
     ctx.fillRect(bx + w * 0.28, by, 0.022, h); ctx.fillRect(bx + w * 0.72 - 0.022, by, 0.022, h);
   }
+  }
   // body
   body();
+  if (part & PART_BODY) {
   wisp(sw);
-  const fill = ctx.createLinearGradient(0, -1, 0, 0);
-  fill.addColorStop(0, "rgba(242,252,255,0.98)"); fill.addColorStop(0.55, "rgba(204,241,255,0.92)"); fill.addColorStop(1, "rgba(160,225,255,0)");
-  ctx.fillStyle = fill; ctx.fill();
-  // its lantern's light on the side of the body and face toward it (the lantern, in body units)
-  const Lx = 0.33 + 0.14 / k, Ly = -0.47 - 0.265 / k;
-  const lamp = ctx.createRadialGradient(Lx, Ly, 0, Lx, Ly, LAMP_REACH);
-  lamp.addColorStop(0, `rgba(${tr.lamp},${LAMP_ON_BODY})`); lamp.addColorStop(0.55, `rgba(${tr.lamp},${LAMP_ON_BODY * 0.45})`); lamp.addColorStop(1, `rgba(${tr.lamp},0)`);
-  ctx.fillStyle = lamp; ctx.fill();
-  // arms
-  ctx.fillStyle = "rgba(226,248,255,0.95)";
-  ctx.beginPath(); ctx.ellipse(-0.31, -0.48, 0.065, 0.042, -0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(0.31, -0.48, 0.065, 0.042, 0.5, 0, Math.PI * 2); ctx.fill();
-  // face
-  ctx.fillStyle = "#20264a";
-  for (const ex of [-0.1, 0.1]) { ctx.beginPath(); ctx.ellipse(ex, -0.69, 0.034, 0.05, 0, 0, Math.PI * 2); ctx.fill(); }
+  // shaded, with its lantern's light on the side of the body and face toward it: one fill with the two painted
+  // together (bodyPaint), or, for a body bigger than that's painted, the two fills
+  const paint = B * DPR <= BODY_RES * 1.5 ? bodyPaint(tr.lamp, k) : null;
+  if (paint) { ctx.fillStyle = paint; ctx.fill(); }
+  else {
+    ctx.fillStyle = bodyShade(); ctx.fill();
+    // (the glow is made around (0, 0) once per colour, and moved to the lantern; the traced outline stays put)
+    const [Lx, Ly] = lampAt(k);
+    ctx.translate(Lx, Ly); ctx.fillStyle = lampOnBody(tr.lamp); ctx.fill(); ctx.translate(-Lx, -Ly);
+  }
+  }
+  if (part & PART_FRONT) { // arms: one shape (the same colour, and apart), so one drawing step
+    ctx.fillStyle = "rgba(226,248,255,0.95)"; ctx.beginPath();
+    for (const [ax, rot] of [[-0.31, -0.5], [0.31, 0.5]]) {
+      ctx.moveTo(ax + 0.065 * Math.cos(rot), -0.48 + 0.065 * Math.sin(rot)); ctx.ellipse(ax, -0.48, 0.065, 0.042, rot, 0, Math.PI * 2);
+    }
+    ctx.fill();
+  }
+  if (part & PART_BODY) { // face: drawn live with the body (in the middle distance too), so the eyes stay crisp
+  ctx.fillStyle = "#20264a"; ctx.beginPath();
+  for (const ex of [-0.1, 0.1]) { ctx.moveTo(ex + 0.034, -0.69); ctx.ellipse(ex, -0.69, 0.034, 0.05, 0, 0, Math.PI * 2); }
+  ctx.fill();
   if (B > 40) {
     ctx.fillStyle = "#ffffff";
     for (const ex of [-0.088, 0.112]) { ctx.beginPath(); ctx.arc(ex, -0.705, 0.011, 0, Math.PI * 2); ctx.fill(); }
@@ -715,6 +793,8 @@ function drawSoul(x, y, S, s, t, called) {
     ctx.strokeStyle = "#20264a"; ctx.lineWidth = 0.014;
     ctx.beginPath(); ctx.arc(0, -0.645, 0.045, 0.35, Math.PI - 0.35); ctx.stroke();
   }
+  }
+  if (part & PART_FRONT) {
   // lantern on a pole in the right hand, or for a donor, a sparkler burning in the lantern's colour
   carried(rx, ry);
   if (tr.donation) drawSparkler(tr, id, t, B);
@@ -736,9 +816,88 @@ function drawSoul(x, y, S, s, t, called) {
     ctx.fillRect(-0.52, -0.38, 0.17, 0.08); ctx.strokeRect(-0.52, -0.38, 0.17, 0.08);
     for (const sx of [-0.52, -0.35]) { ctx.beginPath(); ctx.arc(sx, -0.34, 0.03, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   }
-  if (tr.nft) { carried(side, head); drawCertificate(id, t); }
+  }
+  if (tr.nft && part & PART_CERT) { carried(side, head); drawCertificate(id, t); }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 }
+
+// ---- the middle distance, pre-drawn ----
+// Hundreds of souls can stand in the middle distance, near enough to be drawn in full, and a browser's canvas
+// spends about the same time on each of a soul's ~20 drawing steps, whatever it draws, so a long line slowed
+// the whole page (and starved the sound). So there each soul's still parts are drawn once, into two images
+// (behind its body, and in front of it), and stamped every frame, with only its swaying body and its face
+// drawn live between them: 5 steps instead of ~20, and it looks the same. An image is redrawn when the soul's size
+// changes by 1.5% (it walks forward); in between it's stretched to the exact size. The images live in a few
+// shared atlas canvases (1024 px square, at most 32 of them, 134 MB; in practice a few), in square slots: a
+// size of slot takes a row of a page at a time, and slots are reused as souls come and go. Not pre-drawn: souls
+// being called (they glow), donors (the sparkler moves), and any too big for the largest slot. Frozen in the
+// images: a single suitcase's bob (at most about half a pixel at this distance).
+const ATLAS = 1024, SLOT_SIZES = [24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 256], ATLAS_PAGES = 32, SIZE_STEP = Math.log(1.015);
+const atlas = { pages: [], free: new Map() }, preDrawn = new Set(); // pages: { c, g, rows (px used) }; free: slot size -> free slots
+const noPreDraw = /nopredraw/.test(location.hash); // test: draw the middle distance live, to compare
+function slotTake(size) {
+  let list = atlas.free.get(size);
+  if (!list) atlas.free.set(size, (list = []));
+  if (!list.length) { // a new row of this size's slots, on a page with room for it (or a new page)
+    let page = atlas.pages.find((p) => p.rows + size <= ATLAS);
+    if (!page) {
+      if (atlas.pages.length >= ATLAS_PAGES) return null;
+      const c = document.createElement("canvas"); c.width = c.height = ATLAS;
+      atlas.pages.push((page = { c, g: c.getContext("2d"), rows: 0 }));
+    }
+    for (let x = 0; x + size <= ATLAS; x += size) list.push({ page, x, y: page.rows, size });
+    page.rows += size;
+  }
+  return list.pop();
+}
+const slotGive = (sl) => { if (sl) atlas.free.get(sl.size).push(sl); };
+function dropImages(s) { if (s.img) { slotGive(s.img.back); slotGive(s.img.front); s.img = null; } preDrawn.delete(s); }
+function atlasReset() { for (const s of preDrawn) s.img = null; preDrawn.clear(); atlas.pages.length = 0; atlas.free.clear(); } // (new size or DPR)
+// a soul's two images at about size S (redrawn if it has changed size), or null: draw it live
+function soulImages(s, S) {
+  const tr = s.tr, k = tr.scale, g = k - 1, q = Math.round(Math.log(S) / SIZE_STEP);
+  if (s.img && s.img.q === q) return s.img;
+  const Sq = Math.exp(q * SIZE_STEP);
+  if (Sq * k < 16) return null; // drawn small, as it would be live
+  // what the still parts cover, in soul heights around the soul's origin (see drawSoul), and a margin
+  const dolly = tr.bags >= DOLLY_FROM, stack = dolly ? 0.085 - 0.222 + tr.bags * BAG_H : 0;
+  const L = Math.min(-0.4 * k, -0.57 - 0.31 * g, dolly ? -0.66 - 0.3 * g : 0) - 0.05, R = 0.93 + 0.33 * g + 0.05;
+  const T = Math.min(-1.19 - 0.47 * g, -0.78 * k, -stack) - 0.05, Bt = 0.29 + 0.065 * k + 0.05;
+  const need = Math.ceil(Math.max(R - L, Bt - T) * Sq * DPR) + 2, size = SLOT_SIZES.find((z) => z >= need);
+  if (!size) return null;
+  let img = s.img;
+  if (img && img.back.size !== size) { dropImages(s); img = null; }
+  if (!img) {
+    const back = slotTake(size), front = back && slotTake(size);
+    if (!front) { slotGive(back); return null; } // the atlas is full: live
+    img = s.img = { back, front }; preDrawn.add(s);
+  }
+  Object.assign(img, { q, Sq, ax: -L * Sq + 1 / DPR, ay: -T * Sq + 1 / DPR });
+  for (const [sl, part] of [[img.back, PART_BACK], [img.front, PART_FRONT]]) {
+    const main = ctx;
+    ctx = sl.page.g;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(sl.x, sl.y, sl.size, sl.size);
+    ctx.save(); ctx.beginPath(); ctx.rect(sl.x, sl.y, sl.size, sl.size); ctx.clip();
+    drawSoul(sl.x / DPR + img.ax, sl.y / DPR + img.ay, Sq, s, 0, false, part);
+    ctx.restore();
+    ctx = main;
+  }
+  return img;
+}
+// a soul in the middle distance: its images and its live body, or all of it live
+function midSoul(s, t) {
+  standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
+  const tr = s.tr, img = !noPreDraw && sS * tr.scale >= 16 && s.st !== 2 && !tr.donation ? soulImages(s, sS) : null;
+  if (!img) { if (s.img) dropImages(s); return drawSoul(sx, sy, sS, s, t, s.st === 2); }
+  img.seen = frameNo;
+  const sc = sS / img.Sq, x0 = sx - img.ax * sc, y0 = sy - img.ay * sc, d = (img.back.size / DPR) * sc;
+  ctx.drawImage(img.back.page.c, img.back.x, img.back.y, img.back.size, img.back.size, x0, y0, d, d);
+  drawSoul(sx, sy, sS, s, t, false, PART_BODY);
+  ctx.drawImage(img.front.page.c, img.front.x, img.front.y, img.front.size, img.front.size, x0, y0, d, d);
+  if (tr.nft) drawSoul(sx, sy, sS, s, t, false, PART_CERT);
+}
+// give back the images of souls no longer drawn in the middle distance (gone, or moved out of it)
+function sweepImages() { for (const s of preDrawn) if (!(s.img && s.img.seen >= frameNo - 30)) dropImages(s); }
 
 // ---- the line: who stands where ----
 // line[] is front first: highest fee per byte first, equal fees in arrival order.
@@ -1443,14 +1602,18 @@ function draw() {
     if (gz >= farZ) continue;
     (gz >= PIER_END + 0.3 ? mids : nears).push(s);
   }
-  drawPools(mids);
+  // the middle distance's pools: hundreds of glows, so painted into their own layer only when souls have moved
+  // (whenever the far souls are), and that added on; adding light is adding light, so it's the same picture
+  if (farDirty) { const main = ctx; ctx = poolCtx; ctx.clearRect(0, 0, W, H); drawPools(mids); ctx = main; }
+  ctx.globalCompositeOperation = "lighter"; ctx.drawImage(poolCv, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
   if (farDirty) { drawFar(n); farDirty = !!block; } // called souls pulse, so keep redrawing during a block
   ctx.drawImage(farCv, 0, 0, W, H); // far souls: painted, like the nearer ones
   const soul = (s) => {
     standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
     drawSoul(sx, sy, sS, s, t, s.st === 2);
   };
-  mids.forEach(soul);
+  for (const s of mids) midSoul(s, t);
+  if (frameNo % 60 === 0) sweepImages();
   if (leavers.length) drawLeavers(t, false);
   ctx.drawImage(pier, 0, 0, W, H);
   drawPools(nears);
@@ -1488,10 +1651,14 @@ function draw() {
 // only for the live feed: made-up traffic simply waits. In view, a frame steps at most 0.05 s, so a stall
 // slows the scene for a moment rather than jumping it.
 let lastTs = 0;
+const frameMs = []; let frameCount = 0; // (studio diagnostics) the work each recent frame took; frames so far
 function frame(ts) {
+  const t0 = performance.now();
   step(clamp(lastTs ? (ts - lastTs) / 1000 : 0, 0, 0.05));
   lastTs = Math.max(lastTs, ts);
   draw();
+  frameMs.push(performance.now() - t0); frameCount++;
+  if (frameMs.length > 120) frameMs.splice(0, frameMs.length - 120);
   requestAnimationFrame(frame);
 }
 function runUnseen() {
@@ -1509,8 +1676,10 @@ function resize() {
   cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
   f = H * FOCAL; cy = H / 2; yh = cy - (f * SIN) / COS; // yh: where the horizon falls
   farCv = document.createElement("canvas"); farCv.width = cv.width; farCv.height = cv.height;
+  poolCv = document.createElement("canvas"); poolCv.width = cv.width; poolCv.height = cv.height;
+  poolCtx = poolCv.getContext("2d"); poolCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
   farCtx = farCv.getContext("2d"); farCtx.setTransform(DPR, 0, 0, DPR, 0, 0); farCtx.globalCompositeOperation = "lighter";
-  farDirty = true;
+  farDirty = true; atlasReset();
   buildPath(); renderBg(); renderPier();
   for (let i = 0; i < line.length; i++) { locate(i); line[i].x = gx; line[i].z = gz; } // places moved: everyone straight to theirs
   if (frozen) draw();
@@ -1700,6 +1869,44 @@ if (stress) { // starts with an empty beach; the first full block comes after on
   new RelayFeed(relayUrl(), both, (st) => { feedEl.textContent = st; });
 }
 if (!synthetic) for (const id of ["mine", "add", "cut"]) ctl(id).hidden = true; // only for made-up traffic
+
+// Studio diagnostics: how hard the page is working (the readout, and window.__diag() for tests), and a burst of
+// 500 made-up transactions at once (through the live path when live: sound, drop and all).
+if (studio) {
+  let frames = 0, lastCount = 0, clock0 = null;
+  const diag = () => {
+    const ms = frameMs.slice(-Math.max(1, frames)), ctxA = sonifier.ctx;
+    let osc = 0;
+    for (const v of sonifier.voices.values()) if (v.groups) for (const g of v.groups) if (g.osc) osc++;
+    const drift = ctxA && ctxA.state === "running" ? ctxA.currentTime - performance.now() / 1000 : null;
+    if (drift != null && clock0 == null) clock0 = drift;
+    return {
+      fps: frames, frameAvg: ms.reduce((a, b) => a + b, 0) / ms.length, frameMax: Math.max(...ms),
+      line: line.length, falling: arrivals.length, flying: flyers.length,
+      notes: sonifier.voices.size, oscillators: osc, waves: sonifier.waves ? sonifier.waves.waves.length : 0,
+      audio: ctxA ? ctxA.state : "none", driftMs: drift == null || clock0 == null ? null : (drift - clock0) * 1000,
+      hidden: document.hidden, radio: !!(radio && radio.on && !radio.audio.paused),
+      preDrawn: preDrawn.size, atlasPages: atlas.pages.length, atlasMB: (atlas.pages.length * ATLAS * ATLAS * 4) / 1e6,
+    };
+  };
+  window.__diag = diag;
+  setInterval(() => {
+    frames = frameCount - lastCount; lastCount = frameCount;
+    if (document.hidden) return;
+    const d = diag();
+    ctl("diag").textContent = `${d.fps} fps · frame ${d.frameAvg.toFixed(1)} ms avg, ${d.frameMax.toFixed(0)} max · ${d.falling} falling · ` +
+      `${d.preDrawn} souls pre-drawn (${d.atlasPages} atlas pages, ${d.atlasMB.toFixed(0)} MB) · ` +
+      `${d.notes} notes, ${d.oscillators} oscillators · ${d.waves} waves queued · audio ${d.audio}` + (d.driftMs != null ? `, clock drift ${d.driftMs.toFixed(0)} ms` : "");
+  }, 1000);
+  ctl("burst").onclick = () => {
+    for (let i = 0; i < 500; i++) {
+      const tx = madeUpTx();
+      tx.txid = `synthetic-burst-${nextId}-${i}`; tx.fee = Math.round(randomFee() * tx.size);
+      if (synthetic) { addSoul(tx.fee / tx.size, 0, tx); sonifier.event(tx); }
+      else { sonifier.event(tx); liveFeed.event(tx); }
+    }
+  };
+}
 const sourceSel = ctl("source");
 sourceSel.value = source;
 sourceSel.onchange = () => { // a fresh start on the other source

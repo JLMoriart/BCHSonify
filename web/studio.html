@@ -55,6 +55,10 @@ details.sec .groups { margin-top: 4px; align-items: start; }
       <label class="dim">as a block of <input id="strikeMB" type="number" min="0" max="32" step="0.01" value="16" style="width:5.5em"> MB of the 32 MB limit: holds <span id="strikeHold" class="num"></span></label>
       <button id="stopBlock" type="button">Stop block</button>
     </div>
+    <div class="bar">
+      <button id="burst" type="button" title="500 made-up transactions arrive at once, sound and all, as a test of how the page copes">Burst: 500 transactions</button>
+      <span id="diag" class="dim num" title="How hard the page is working: drawing time per frame, souls falling, sounding notes and their oscillators, ocean waves queued, the audio engine's state, and how far its clock has drifted from the page's"></span>
+    </div>
     <div class="bar" id="fwTest"><span class="dim">Test a firework</span></div>
     <div class="bar">
       <label class="dim">Preset <select id="preset"></select></label>
