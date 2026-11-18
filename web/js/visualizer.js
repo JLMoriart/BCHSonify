@@ -62,7 +62,7 @@ const START_SOULS = 2500, ARRIVALS_PER_S = 4, FIRST_BLOCK = 8, BLOCK_EVERY = 45;
 const STRESS_LIMIT = 32e6, STRESS_BLOCK_EVERY = 60, STRESS_FILL = 1.1;
 const FERRY_STAY = 0.8;            // seconds the ferry stays docked at least, even with nobody to take
 const UNKNOWN_FEE_RATE = 1;        // sats/byte assumed when the relay couldn't get a transaction's fee
-const EXPLORER_TX = "https://bchexplorer.cash/tx/"; // + txid: a transaction's page on the block explorer
+const EXPLORER_TX = "https://bchexplorer.info/tx/"; // + txid: a transaction's page on the block explorer
 // lantern colour by fee: one colour per doubling of sats/byte, 1 red, 2 orange, 4 yellow, 8 green, 16 blue,
 // 32 indigo, 64 violet, 128 purple, 256 and up hot magenta; evenly between them per doubling (hue, degrees)
 const FEE_HUES = [0, 30, 60, 120, 240, 258, 275, 295, 320];
@@ -299,21 +299,31 @@ function renderBg() {
   gr.addColorStop(0, "rgba(130,150,158,0)"); gr.addColorStop(0.5, "rgba(130,150,158,0.2)"); gr.addColorStop(1, "rgba(130,150,158,0)");
   g.fillStyle = gr; g.fillRect(0, yh - H * 0.012, W, H * 0.042);
 
-  // dark wet sand at the waterline, with the sky's sheen on it
+  // the waterline: wavy, so the wet sand and its sheen follow it rather than a straight edge
   const yw = Y(SHORE + 1.3), ys = Y(SHORE);
+  const waterline = () => {
+    g.beginPath();
+    for (let xs = 0; xs <= W + 8; xs += 8) {
+      const xw = across(xs, SHORE);
+      const zz = SHORE + 0.25 * Math.sin(xw * 0.35) + 0.15 * Math.sin(xw * 1.1);
+      const y = Y(zz, -0.05);
+      xs === 0 ? g.moveTo(xs, y) : g.lineTo(xs, y);
+    }
+  };
+  // dark wet sand above it, darkening toward the water (down past its lowest dip; the water covers the rest)
+  const yl = Y(SHORE - 0.5);
   gr = g.createLinearGradient(0, yw, 0, ys);
-  gr.addColorStop(0, "rgba(20,24,30,0)"); gr.addColorStop(0.75, "rgba(20,24,30,0.8)"); gr.addColorStop(1, "rgba(62,74,90,0.9)");
-  g.fillStyle = gr; g.fillRect(0, yw, W, ys - yw + 2);
+  gr.addColorStop(0, "rgba(20,24,30,0)"); gr.addColorStop(0.75, "rgba(20,24,30,0.8)"); gr.addColorStop(1, "rgba(24,29,37,0.85)");
+  g.fillStyle = gr; g.fillRect(0, yw, W, yl - yw);
+  // the sky's sheen on the wettest sand: a soft glow along the waterline (its lower half is under the water)
+  waterline(); g.lineJoin = "round";
+  for (const [wd, a] of [[ppm(SHORE) * 0.5, 0.05], [ppm(SHORE) * 0.28, 0.07], [ppm(SHORE) * 0.12, 0.09]]) {
+    g.strokeStyle = `rgba(90,106,126,${a})`; g.lineWidth = wd; g.stroke();
+  }
   groundGlow(g, across(mx, SHORE + 0.6), SHORE + 0.6, 0, 1.6, "180,205,200", 0.22); // the moon's gleam on the wet sand
 
   // water from the shoreline to the bottom of the frame
-  g.beginPath();
-  for (let xs = 0; xs <= W + 8; xs += 8) {
-    const xw = across(xs, SHORE);
-    const zz = SHORE + 0.25 * Math.sin(xw * 0.35) + 0.15 * Math.sin(xw * 1.1);
-    const y = Y(zz, -0.05);
-    xs === 0 ? g.moveTo(xs, y) : g.lineTo(xs, y);
-  }
+  waterline();
   g.lineTo(W + 8, H); g.lineTo(0, H); g.closePath();
   gr = g.createLinearGradient(0, ys, 0, H);
   gr.addColorStop(0, "#1b2d47"); gr.addColorStop(1, "#060c18"); // deep night blue, darkest near us
@@ -1516,7 +1526,7 @@ function fillDetails() {
   rows.push(["Fee", fee != null ? `${sats(fee)} · ${(size ? fee / size : s.fee).toFixed(2)} sat/byte` : `unknown (placed as ${UNKNOWN_FEE_RATE} sat/byte)`]);
   rows.push(["Size", size ? `${size.toLocaleString("en-US")} bytes` : "unknown"]);
   if (outs) {
-    const total = outs.reduce((a, v) => a + v, 0), shown = outs.slice(0, 6).map(bch).join(", ");
+    const total = outs.reduce((a, v) => a + v, 0), shown = [...outs].sort((a, b) => b - a).slice(0, 6).map(bch).join(", "); // largest first
     rows.push(["Outputs", `${outs.length} · ${bch(total)} in all`]);
     rows.push(["", shown + (outs.length > 6 ? `, and ${outs.length - 6} more` : "")]);
   } else rows.push(["Outputs", "unknown: it was already waiting when the relay started"]);
@@ -1550,7 +1560,7 @@ function fillDetails() {
   infoValues = rows.map(([k, v]) => { const dd = el("dd", v); dl.append(el("dt", k), dd); return dd; });
   info.append(head, dl);
   if (!madeUp) {
-    const a = el("a", "View on bchexplorer.cash ↗");
+    const a = el("a", "View on bchexplorer.info ↗");
     a.href = EXPLORER_TX + s.txid; a.target = "_blank"; a.rel = "noopener";
     info.append(a);
   }
