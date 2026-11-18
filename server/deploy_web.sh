@@ -3,8 +3,11 @@
 #   - Caddy (from Caddy's own apt repository) serves it over https, with a certificate it gets and
 #     renews by itself, and passes /ws through to the relay on 127.0.0.1:8765
 #   - the firewall opens 80 (certificates, and redirecting http to https) and 443
-#   - copies the visitors' files from web/ to /var/www/bchsonify, swapped in all at once. Not the studio
-#     (studio.html and the old addresses that forward to it) or the test pages.
+#   - the visitors' files from web/ go to /var/www/bchsonify, swapped in all at once. Not the studio
+#     (studio.html and the old addresses that forward to it) or the test pages (web/_*).
+# Only what changed is uploaded: the server keeps a copy of the site (/var/www/bchsonify.stage) that rsync
+# brings up to date, and the live site is made from it (hard links: no copying) and swapped in. So the
+# songs (megabytes) go up once, not on every deploy.
 # Server login from BCHSONIFY_VPS and the site's address from BCHSONIFY_SITE (env or ../run_node.env),
 # e.g. BCHSONIFY_SITE=example.com. Its DNS must already point at the server, for the certificate.
 set -euo pipefail
@@ -14,12 +17,11 @@ VPS=${BCHSONIFY_VPS:?set BCHSONIFY_VPS=user@host (env or run_node.env)}
 SITE=${BCHSONIFY_SITE:?set BCHSONIFY_SITE=the site address, e.g. example.com (env or run_node.env)}
 [[ $SITE =~ ^[a-z0-9.-]+$ ]] || { echo "BCHSONIFY_SITE should be a plain host name, like example.com"; exit 1; }
 
-FILES=(index.html css js vendor donate donate.json sound.json radio)
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
-sed "s|{SITE}|$SITE|" Caddyfile > "$TMP/Caddyfile"
-tar -C ../web -czf "$TMP/site.tgz" "${FILES[@]}"
-scp -q "$TMP/Caddyfile" "$TMP/site.tgz" "$VPS":/tmp/
-ssh "$VPS" 'set -e
+FILES=(index.html css js vendor donate donate.json sound.json radio) # in web/: what visitors get
+LIVE=/var/www/bchsonify STAGE=/var/www/bchsonify.stage
+
+# 1. the server ready: Caddy, the firewall, and the copy to update (the first time: from the live site)
+ssh "$VPS" "set -e
 if ! command -v caddy >/dev/null; then
   DEBIAN_FRONTEND=noninteractive apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl gpg >/dev/null
   curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
@@ -27,14 +29,25 @@ if ! command -v caddy >/dev/null; then
   chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sources.list.d/caddy-stable.list
   apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq caddy >/dev/null
 fi
+command -v rsync >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync >/dev/null
 ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; ufw allow 443/udp >/dev/null
-rm -rf /var/www/bchsonify.new && install -d -m 755 /var/www/bchsonify.new
-tar -xzf /tmp/site.tgz -C /var/www/bchsonify.new --no-same-owner && chmod -R a+rX,go-w /var/www/bchsonify.new
-[ -d /var/www/bchsonify ] && mv /var/www/bchsonify /var/www/bchsonify.old
-mv /var/www/bchsonify.new /var/www/bchsonify && rm -rf /var/www/bchsonify.old /tmp/site.tgz
+if [ ! -d $STAGE ]; then if [ -d $LIVE ]; then cp -a $LIVE $STAGE; else install -d -m 755 $STAGE; fi; fi"
+
+# 2. the copy made exactly the listed files (what changed is sent; anything else there is removed)
+filters=(--exclude='_*')
+for f in "${FILES[@]}"; do filters+=(--include="/$f" --include="/$f/***"); done
+filters+=(--exclude='*')
+rsync -rlptz --delete --delete-excluded --chmod=D755,F644 "${filters[@]}" --out-format='  sent %n' ../web/ "$VPS:$STAGE/"
+
+# 3. the live site swapped for a hard-linked copy of it, and Caddy's configuration
+sed "s|{SITE}|$SITE|" Caddyfile | ssh "$VPS" "set -e
+cat > /tmp/Caddyfile
+rm -rf $LIVE.new && cp -al $STAGE $LIVE.new
+[ -d $LIVE ] && mv $LIVE $LIVE.old
+mv $LIVE.new $LIVE && rm -rf $LIVE.old
 caddy validate --adapter caddyfile --config /tmp/Caddyfile >/dev/null 2>&1 || { caddy validate --adapter caddyfile --config /tmp/Caddyfile; exit 1; }
 install -m 644 /tmp/Caddyfile /etc/caddy/Caddyfile && rm -f /tmp/Caddyfile
 systemctl enable --now caddy >/dev/null 2>&1
 systemctl reload caddy
-systemctl is-active caddy'
+systemctl is-active caddy"
 echo "https://$SITE/"
