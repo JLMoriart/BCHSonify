@@ -86,6 +86,7 @@ let W = 0, H = 0, DPR = 1, yh = 0, cy = 0, f = 0, bg = null, pier = null, path =
 let landTop = null, skyClip = null; // the top of the land (y every 2 px from x = -4), and the sky above it as a clip path
 let slots = null, cap = 0, farZ = 0, farCv = null, farCtx = null, farDirty = true;
 let poolCv = null, poolCtx = null; // the middle distance's lantern light on the ground, repainted with the far souls
+let trailCv = null, trailCtx = null; // the light trails of souls flying to the ferry (see streaks)
 let lastText = "", frameNo = 0, frozen = false, glints = [];
 let gx = 0, gz = 0, sx = 0, sy = 0, sS = 0, wx = 0, wz = 0, we = 0; // scratch outputs, to avoid allocating per soul
 
@@ -830,11 +831,16 @@ function drawSoul(x, y, S, s, t, called, part = PART_ALL) {
 // changes by 1.5% (it walks forward); in between it's stretched to the exact size. The images live in a few
 // shared atlas canvases (1024 px square, at most 32 of them, 134 MB; in practice a few), in square slots: a
 // size of slot takes a row of a page at a time, and slots are reused as souls come and go. Not pre-drawn: souls
-// being called (they glow), donors (the sparkler moves), and any too big for the largest slot. Frozen in the
-// images: a single suitcase's bob (at most about half a pixel at this distance).
+// donors (the sparkler moves), and any too big for the largest slot. Frozen in the
+// images: a single suitcase's bob (at most about half a pixel at this distance). A soul the ferry calls gets
+// its images again, with the gold glow it has then (behind its body; it doesn't move).
 const ATLAS = 1024, SLOT_SIZES = [24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 256], ATLAS_PAGES = 32, SIZE_STEP = Math.log(1.015);
 const atlas = { pages: [], free: new Map() }, preDrawn = new Set(); // pages: { c, g, rows (px used) }; free: slot size -> free slots
 const noPreDraw = /nopredraw/.test(location.hash); // test: draw the middle distance live, to compare
+// at most this many souls' images drawn in a frame: when hundreds change at once (the ferry calls them, or the
+// line walks forward), the rest show their old images, stretched, for a few frames, rather than one long frame
+const REDRAWS_PER_FRAME = 30;
+let redraws = 0;
 function slotTake(size) {
   let list = atlas.free.get(size);
   if (!list) atlas.free.set(size, (list = []));
@@ -852,18 +858,41 @@ function slotTake(size) {
 }
 const slotGive = (sl) => { if (sl) atlas.free.get(sl.size).push(sl); };
 function dropImages(s) { if (s.img) { slotGive(s.img.back); slotGive(s.img.front); s.img = null; } preDrawn.delete(s); }
-function atlasReset() { for (const s of preDrawn) s.img = null; preDrawn.clear(); atlas.pages.length = 0; atlas.free.clear(); } // (new size or DPR)
-// a soul's two images at about size S (redrawn if it has changed size), or null: draw it live
-function soulImages(s, S) {
-  const tr = s.tr, k = tr.scale, g = k - 1, q = Math.round(Math.log(S) / SIZE_STEP);
-  if (s.img && s.img.q === q) return s.img;
+function atlasReset() { // (new size or DPR)
+  for (const s of preDrawn) s.img = null;
+  for (const s of liftOffs) s.fly = null;
+  preDrawn.clear(); liftOffs.clear(); atlas.pages.length = 0; atlas.free.clear();
+}
+// what a full-detail soul covers, in soul heights around its origin (see drawSoul), with a margin:
+// [left, right, top, bottom]
+function soulBox(tr, called) {
+  const k = tr.scale, g = k - 1, dolly = tr.bags >= DOLLY_FROM, stack = dolly ? 0.085 - 0.222 + tr.bags * BAG_H : 0;
+  let L = Math.min(-0.4 * k, -0.57 - 0.31 * g, dolly ? -0.66 - 0.3 * g : 0) - 0.05, R = 0.93 + 0.33 * g + 0.05;
+  let T = Math.min(-1.19 - 0.47 * g, -0.78 * k, -stack) - 0.05, Bt = 0.29 + 0.065 * k + 0.05;
+  if (tr.donation) { R = Math.max(R, 1.25 + 0.33 * g); T = Math.min(T, -1.6 - 0.47 * g); } // the sparkler's sparks and glow
+  if (called) { L = Math.min(L, -0.93 * k); R = Math.max(R, 0.93 * k); T = Math.min(T, -1.53 * k); Bt = Math.max(Bt, 0.33 * k); } // its glow (radius 0.9 around (0, -0.6))
+  return [L, R, T, Bt];
+}
+// draw the given parts of soul s, at size S, into an atlas slot, with its origin at (ax, ay) in the slot
+function drawInSlot(sl, s, S, ax, ay, t, called, part) {
+  const main = ctx;
+  ctx = sl.page.g;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(sl.x, sl.y, sl.size, sl.size);
+  ctx.save(); ctx.beginPath(); ctx.rect(sl.x, sl.y, sl.size, sl.size); ctx.clip();
+  drawSoul(sl.x / DPR + ax, sl.y / DPR + ay, S, s, t, called, part);
+  ctx.restore();
+  ctx = main;
+}
+// A soul's two images at about size S (redrawn if it has changed size, or been called), or null: draw it live.
+// Images are only drawn in a frame's first pass (prepareImages), before any are stamped: a canvas drawn into
+// and then stamped from has to be copied whole first, so interleaving the two cost a copy per soul.
+function soulImages(s, S, mayDraw = false) {
+  const tr = s.tr, k = tr.scale, q = Math.round(Math.log(S) / SIZE_STEP), called = s.st === 2;
+  if (s.img && s.img.q === q && s.img.called === called) return s.img;
+  if (!mayDraw || redraws >= REDRAWS_PER_FRAME) return s.img; // the old one meanwhile (none yet: drawn live)
   const Sq = Math.exp(q * SIZE_STEP);
   if (Sq * k < 16) return null; // drawn small, as it would be live
-  // what the still parts cover, in soul heights around the soul's origin (see drawSoul), and a margin
-  const dolly = tr.bags >= DOLLY_FROM, stack = dolly ? 0.085 - 0.222 + tr.bags * BAG_H : 0;
-  const L = Math.min(-0.4 * k, -0.57 - 0.31 * g, dolly ? -0.66 - 0.3 * g : 0) - 0.05, R = 0.93 + 0.33 * g + 0.05;
-  const T = Math.min(-1.19 - 0.47 * g, -0.78 * k, -stack) - 0.05, Bt = 0.29 + 0.065 * k + 0.05;
-  const need = Math.ceil(Math.max(R - L, Bt - T) * Sq * DPR) + 2, size = SLOT_SIZES.find((z) => z >= need);
+  const [L, R, T, Bt] = soulBox(tr, called), need = Math.ceil(Math.max(R - L, Bt - T) * Sq * DPR) + 2, size = SLOT_SIZES.find((z) => z >= need);
   if (!size) return null;
   let img = s.img;
   if (img && img.back.size !== size) { dropImages(s); img = null; }
@@ -872,22 +901,30 @@ function soulImages(s, S) {
     if (!front) { slotGive(back); return null; } // the atlas is full: live
     img = s.img = { back, front }; preDrawn.add(s);
   }
-  Object.assign(img, { q, Sq, ax: -L * Sq + 1 / DPR, ay: -T * Sq + 1 / DPR });
-  for (const [sl, part] of [[img.back, PART_BACK], [img.front, PART_FRONT]]) {
-    const main = ctx;
-    ctx = sl.page.g;
-    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(sl.x, sl.y, sl.size, sl.size);
-    ctx.save(); ctx.beginPath(); ctx.rect(sl.x, sl.y, sl.size, sl.size); ctx.clip();
-    drawSoul(sl.x / DPR + img.ax, sl.y / DPR + img.ay, Sq, s, 0, false, part);
-    ctx.restore();
-    ctx = main;
-  }
+  Object.assign(img, { q, called, Sq, ax: -L * Sq + 1 / DPR, ay: -T * Sq + 1 / DPR });
+  redraws++;
+  drawInSlot(img.back, s, Sq, img.ax, img.ay, 0, called, PART_BACK);
+  drawInSlot(img.front, s, Sq, img.ax, img.ay, 0, called, PART_FRONT);
   return img;
+}
+// the frame's first pass: the images the middle distance and the souls lifting off will need, drawn now.
+// Lift-offs first, with their own allowance: without its picture a soul lifting off is drawn in full, while
+// a soul whose image is out of date shows the old one meanwhile.
+function prepareImages(t) {
+  if (noPreDraw) return;
+  redraws = 0;
+  for (const s of flyers) if (s.u >= 0 && s.u < 0.35 && 0.9 * ppm(s.oz, s.oe) >= FAR_S) liftOffPicture(s, 0.9 * ppm(s.oz, s.oe), true);
+  redraws = 0;
+  for (const s of mids) {
+    if (s.tr.donation) continue;
+    standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
+    if (sS * s.tr.scale >= 16) soulImages(s, sS, true);
+  }
 }
 // a soul in the middle distance: its images and its live body, or all of it live
 function midSoul(s, t) {
   standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
-  const tr = s.tr, img = !noPreDraw && sS * tr.scale >= 16 && s.st !== 2 && !tr.donation ? soulImages(s, sS) : null;
+  const tr = s.tr, img = !noPreDraw && sS * tr.scale >= 16 && !tr.donation ? soulImages(s, sS) : null;
   if (!img) { if (s.img) dropImages(s); return drawSoul(sx, sy, sS, s, t, s.st === 2); }
   img.seen = frameNo;
   const sc = sS / img.Sq, x0 = sx - img.ax * sc, y0 = sy - img.ay * sc, d = (img.back.size / DPR) * sc;
@@ -898,6 +935,22 @@ function midSoul(s, t) {
 }
 // give back the images of souls no longer drawn in the middle distance (gone, or moved out of it)
 function sweepImages() { for (const s of preDrawn) if (!(s.img && s.img.seen >= frameNo - 30)) dropImages(s); }
+
+// A soul lifting off for the ferry shrinks to a spark over a third of a second or so: drawn from one picture
+// of all of it, taken as it lifts off and shrunk, not drawn afresh at every size (frozen meanwhile: its sway).
+const liftOffs = new Set(); // souls holding a lift-off picture
+function liftOffPicture(s, S, mayDraw = false) {
+  if (s.fly) return s.fly;
+  if (!mayDraw || redraws >= REDRAWS_PER_FRAME) return null; // (drawn live this frame)
+  const [L, R, T, Bt] = soulBox(s.tr, false), need = Math.ceil(Math.max(R - L, Bt - T) * S * DPR) + 2, size = SLOT_SIZES.find((z) => z >= need);
+  const sl = size && slotTake(size);
+  if (!sl) return null;
+  const fly = (s.fly = { sl, S, ax: -L * S + 1 / DPR, ay: -T * S + 1 / DPR, seen: frameNo });
+  drawInSlot(sl, s, S, fly.ax, fly.ay, now, false, PART_ALL);
+  redraws++; liftOffs.add(s);
+  return fly;
+}
+function sweepLiftOffs() { for (const s of liftOffs) if (!(s.fly && s.fly.seen >= frameNo - 2)) { if (s.fly) slotGive(s.fly.sl); s.fly = null; liftOffs.delete(s); } }
 
 // ---- the line: who stands where ----
 // line[] is front first: highest fee per byte first, equal fees in arrival order.
@@ -1213,9 +1266,13 @@ const flightWisp = (s) => (s.u < 0.35 ? 0.9 * ppm(s.oz, s.oe) * (1 - s.u / 0.35)
 // souls in the air: a streak of light each, plus the wisp itself while close to the ground. land: arriving
 // souls, whose light aims at the body's middle and turns into the soul as it lands (see LAND_FROM)
 const thin = [], thick = [], wisps = [];
+// Leaving souls (hundreds at once) are drawn into a layer of their own (trailCv) and that is added onto the
+// scene in one go: each shape added as light costs about as much as adding a whole layer, and there are four.
 function streaks(list, pos, lag, col, wispSize, t, land = false) {
   thin.length = thick.length = wisps.length = 0;
-  ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
+  const main = ctx;
+  if (!land) { ctx = trailCtx; ctx.clearRect(0, 0, W, H); }
+  ctx.globalCompositeOperation = land ? "lighter" : "source-over"; ctx.lineCap = "round";
   ctx.strokeStyle = `rgba(${col},0.5)`; ctx.lineWidth = 1; ctx.beginPath();
   for (const s of list) {
     if (s.u < 0) continue;
@@ -1229,7 +1286,15 @@ function streaks(list, pos, lag, col, wispSize, t, land = false) {
   }
   ctx.stroke();
   ctx.lineWidth = 1.7;
-  for (let i = 0; i < thick.length; i += 6) { // near ones one by one: each fades on its own as it lands
+  if (!land) { // leaving: every tail and every head alike, so all the tails as one shape and all the heads as another
+    ctx.beginPath();
+    for (let i = 0; i < thick.length; i += 6) { ctx.moveTo(thick[i], thick[i + 1]); ctx.lineTo(thick[i + 2], thick[i + 3]); }
+    ctx.stroke();
+    ctx.globalCompositeOperation = "lighter"; // the heads add to their tails, as on the scene
+    ctx.fillStyle = `rgb(${col})`; ctx.beginPath();
+    for (let i = 0; i < thick.length; i += 6) { ctx.moveTo(thick[i + 2] + 2.2, thick[i + 3]); ctx.arc(thick[i + 2], thick[i + 3], 2.2, 0, Math.PI * 2); }
+    ctx.fill();
+  } else for (let i = 0; i < thick.length; i += 6) { // landing: one by one, each fades on its own as it lands
     const [ax, ay, hx, hy, m, S] = thick.slice(i, i + 6);
     if (m < 1) {
       ctx.strokeStyle = `rgba(${col},${0.5 * (1 - m)})`;
@@ -1243,13 +1308,19 @@ function streaks(list, pos, lag, col, wispSize, t, land = false) {
       ctx.fillStyle = `rgb(${col})`; ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, Math.PI * 2); ctx.fill();
     }
   }
-  ctx.fillStyle = `rgb(${col})`;
-  for (let i = 0; i < thin.length; i += 3) { const w = clamp(thin[i + 2] * 0.5, 1.2, 2.4); ctx.fillRect(thin[i] - w / 2, thin[i + 1] - w / 2, w, w); }
+  ctx.fillStyle = `rgb(${col})`; ctx.beginPath(); // the far ones' heads: small squares, as one shape
+  for (let i = 0; i < thin.length; i += 3) { const w = clamp(thin[i + 2] * 0.5, 1.2, 2.4); ctx.rect(thin[i] - w / 2, thin[i + 1] - w / 2, w, w); }
+  ctx.fill();
+  if (!land) { ctx = main; ctx.globalCompositeOperation = "lighter"; ctx.drawImage(trailCv, 0, 0, W, H); }
   ctx.globalCompositeOperation = "source-over";
   for (let i = 0; i < wisps.length; i += 5) {
-    const m = wisps[i + 4];
-    if (land) ctx.globalAlpha = m; // fading in (leaving souls shrink instead)
-    drawSoul(wisps[i + 1], wisps[i + 2], wisps[i + 3], wisps[i], t, false);
+    const s = wisps[i], x = wisps[i + 1], y = wisps[i + 2], size = wisps[i + 3], m = wisps[i + 4];
+    if (land) { ctx.globalAlpha = m; drawSoul(x, y, size, s, t, false); continue; } // fading in
+    const fly = !noPreDraw && liftOffPicture(s, 0.9 * ppm(s.oz, s.oe)); // leaving: shrinking, from its picture
+    if (!fly) { drawSoul(x, y, size, s, t, false); continue; }
+    fly.seen = frameNo;
+    const sc = size / fly.S, d = (fly.sl.size / DPR) * sc;
+    ctx.drawImage(fly.sl.page.c, fly.sl.x, fly.sl.y, fly.sl.size, fly.sl.size, x - fly.ax * sc, y - fly.ay * sc, d, d);
   }
   ctx.globalAlpha = 1;
 }
@@ -1612,8 +1683,10 @@ function draw() {
     standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
     drawSoul(sx, sy, sS, s, t, s.st === 2);
   };
+  prepareImages(t);
   for (const s of mids) midSoul(s, t);
   if (frameNo % 60 === 0) sweepImages();
+  if (liftOffs.size) sweepLiftOffs();
   if (leavers.length) drawLeavers(t, false);
   ctx.drawImage(pier, 0, 0, W, H);
   drawPools(nears);
@@ -1678,6 +1751,8 @@ function resize() {
   farCv = document.createElement("canvas"); farCv.width = cv.width; farCv.height = cv.height;
   poolCv = document.createElement("canvas"); poolCv.width = cv.width; poolCv.height = cv.height;
   poolCtx = poolCv.getContext("2d"); poolCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  trailCv = document.createElement("canvas"); trailCv.width = cv.width; trailCv.height = cv.height;
+  trailCtx = trailCv.getContext("2d"); trailCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
   farCtx = farCv.getContext("2d"); farCtx.setTransform(DPR, 0, 0, DPR, 0, 0); farCtx.globalCompositeOperation = "lighter";
   farDirty = true; atlasReset();
   buildPath(); renderBg(); renderPier();
