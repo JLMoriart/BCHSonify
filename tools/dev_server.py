@@ -6,6 +6,8 @@
   DELETE /api/presets/<kind>/<name>
   PUT    /api/sound                   (JSON body) -> saves web/sound.json, the
                                        default sound the visualizer loads
+  PUT    /api/radio                   (JSON body) -> saves web/radio/radio.json, BCH
+                                       Radio's songs and their lyric timings
 
 Presets live in presets/<kind>/ in the project (outside web/, so they're never
 deployed). Binds 127.0.0.1 only.
@@ -64,6 +66,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_PUT(self):
         if urllib.parse.urlparse(self.path).path == "/api/sound":
             return self._put_json(os.path.join(WEB, "sound.json"), "sound.json")
+        if urllib.parse.urlparse(self.path).path == "/api/radio":
+            return self._put_json(os.path.join(WEB, "radio", "radio.json"), "radio.json")
         r = self._route()
         if r in (None, "bad") or r[1] is None:
             return self._json(400, {"error": "bad preset path"})

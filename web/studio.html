@@ -35,6 +35,7 @@ details.sec .groups { margin-top: 4px; align-items: start; }
   <div class="top">
     <div class="bar">
       <button id="mute" type="button">Mute</button>
+      <button id="radio" type="button" aria-pressed="false" hidden>BCH Radio</button>
       <label class="dim">Transactions
         <select id="source">
           <option value="live">live</option>
@@ -64,6 +65,7 @@ details.sec .groups { margin-top: 4px; align-items: start; }
       <span id="presetState" class="dim"></span>
     </div>
   </div>
+  <details class="sec" id="radioTiming" hidden><summary>BCH Radio: lyric timing</summary></details>
   <div id="sections"></div>
   <details open>
     <summary>Current settings as JSON</summary>

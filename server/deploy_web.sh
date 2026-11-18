@@ -14,7 +14,7 @@ VPS=${BCHSONIFY_VPS:?set BCHSONIFY_VPS=user@host (env or run_node.env)}
 SITE=${BCHSONIFY_SITE:?set BCHSONIFY_SITE=the site address, e.g. example.com (env or run_node.env)}
 [[ $SITE =~ ^[a-z0-9.-]+$ ]] || { echo "BCHSONIFY_SITE should be a plain host name, like example.com"; exit 1; }
 
-FILES=(index.html css js vendor donate donate.json sound.json)
+FILES=(index.html css js vendor donate donate.json sound.json radio)
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 sed "s|{SITE}|$SITE|" Caddyfile > "$TMP/Caddyfile"
 tar -C ../web -czf "$TMP/site.tgz" "${FILES[@]}"

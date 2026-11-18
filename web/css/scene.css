@@ -82,16 +82,23 @@ dialog.give::backdrop { background: transparent; }
 }
 .give .status { min-height: 1.4em; margin: 10px 0 0; color: var(--muted); }
 .give label { display: flex; gap: 8px; align-items: center; }
-/* sound: Mute and Volume, top right of the scene (on the visitors' page) */
+/* sound: Volume, with BCH Radio and Mute beneath it, top right of the scene (on the visitors' page); kept
+   narrow so it stays clear of the moon */
 .sound { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 1;
-  display: flex; gap: 10px; align-items: center; padding: 4px 6px 4px 12px; border-radius: 999px;
-  background: rgba(20,27,46,0.72); border: 1px solid var(--rule); backdrop-filter: blur(4px); }
-.sound > button { order: 2; border-radius: 999px; padding: 4px 12px; }
+  display: grid; grid-template-columns: auto auto; justify-content: end; justify-items: end; gap: 6px; align-items: center;
+  padding: 6px 8px; border-radius: 14px; background: rgba(20,27,46,0.72); border: 1px solid var(--rule); backdrop-filter: blur(4px); }
+.sound label.volume { grid-row: 1; grid-column: 1 / -1; padding: 0 2px 0 4px; }
+.sound label.volume output { display: none; } /* the dB figure is for the studio; narrower, clear of the moon */
+#radio { grid-row: 2; grid-column: 1; }
+#mute { grid-row: 2; grid-column: 2; }
+.sound > button { border-radius: 999px; padding: 4px 12px; }
 .sound label.volume input { width: 110px; }
+#radio[aria-pressed=true] { border-color: rgba(255,214,140,0.7); color: #ffe3ad; box-shadow: 0 0 12px rgba(255,200,110,0.2); }
 @media (max-width: 560px) { .sound label.volume { font-size: 0; gap: 0; } .sound label.volume output { display: none; } .sound label.volume input { width: 72px; } }
 /* the About window */
 dialog.about { width: min(580px, calc(100% - 32px)); line-height: 1.55; }
 .about h2 { padding-right: 36px; }
 .about h3 { margin: 18px 0 4px; font-size: 15px; color: var(--soul); }
 .about p { margin: 8px 0 0; }
-@media (max-width: 420px) { .corner { gap: 6px; } .corner button { padding: 6px 11px; } .sound { gap: 6px; padding-left: 8px; } }
+@media (max-width: 420px) { .corner { gap: 6px; } .corner button { padding: 6px 11px; } .sound { gap: 6px; padding-left: 4px; }
+  .sound label.volume, .sound .wide { display: none; } } /* phones: their own volume buttons, and room for Radio */

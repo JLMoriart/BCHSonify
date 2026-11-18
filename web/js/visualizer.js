@@ -13,6 +13,7 @@ import { setupAbout } from "./about.js";
 import { setupDonate } from "./donate.js";
 import { CONFIG, SATS_PER_BCH, blockHold } from "./mapping.js";
 import { Sonifier } from "./sonifier.js";
+import { Radio, radioSongs } from "./radio.js";
 import { soundControls } from "./soundstart.js";
 import { startingSound, workbench } from "./workbench.js";
 
@@ -73,6 +74,7 @@ const DOLLY_X = -0.42;              // the dolly's middle, soul heights left of 
 const BAG_H = 0.11;                // bag height, in soul heights
 const shotFw = /fw=([\d,]+)/.exec(location.hash); // test: fireworks for these donations (sats), launched 2.3 s (or &fwago=N s) before the shot
 const shotFwAgo = +(/fwago=([\d.]+)/.exec(location.hash) || [0, 2.3])[1];
+const shotLyric = /lyric=([^&]+)/.exec(location.hash); // test: this line of lyrics in the sky (#shot=…&lyric=Some%20words)
 const shotDonors = /donors/.test(location.hash);   // test: every made-up soul is a donor (sparklers everywhere)
 const shotBoat = /boat=([\d.]+)/.exec(location.hash), shotFull = +(/full=([\d.]+)/.exec(location.hash) || [0, 0])[1]; // test: a test boat then, for a block this full
 const shotPick = /pick=(\d+)/.exec(location.hash); // test: open the details of the soul at this place in line (at once in a #shot, else after 1.5 s)
@@ -1383,12 +1385,53 @@ function drawLeavers(t, near) {
 }
 
 const mids = [], nears = [];
+// BCH Radio's lyrics: the line being sung, in soft glowing text in the sky. It goes in the clear stretch of the
+// top row between the buttons and the moon, or on a narrow screen across the sky just under the buttons; a
+// line too long for one row at a readable size is split in two.
+let radio = null, lyricFit = null;
+const LYRIC_FONT = (fs) => `italic 500 ${fs.toFixed(1)}px Inter, system-ui, sans-serif`;
+function fitLyric(text) {
+  const r = cv.getBoundingClientRect(), rel = (e) => { const b = e && e.getBoundingClientRect(); return b && b.width ? { left: b.left - r.left, right: b.right - r.left, top: b.top - r.top, bottom: b.bottom - r.top } : null; };
+  const corner = rel(document.querySelector(".corner")), sound = rel(document.querySelector(".sound"));
+  const mr = Math.min(Math.max(9, H * 0.03), yh * 0.2), moonL = W * MOON_X - mr * 1.8; // the moon (as renderBg draws it)
+  const fs0 = clamp(H * 0.032, 16, 28);
+  let x0 = (corner ? corner.right : 0) + 18, x1 = Math.min(moonL, sound ? sound.left : W) - 18, y = corner ? (corner.top + corner.bottom) / 2 : 30;
+  if (x1 - x0 < 300) { x0 = 16; x1 = W - 16; y = Math.max(corner ? corner.bottom : 0, sound ? sound.bottom : 0) + fs0 * 0.9; } // narrow: under them
+  const room = x1 - x0, width = (t, fs) => { ctx.font = LYRIC_FONT(fs); return ctx.measureText(t).width; };
+  let rows = [text], fs = fs0;
+  const w1 = width(text, fs0);
+  if (w1 > room) {
+    if (w1 * 0.8 <= room) fs = (fs0 * room) / w1; // a little smaller still fits
+    else { // two rows, split at the space nearest the middle
+      const sp = [...text.matchAll(/ /g)].map((m) => m.index);
+      const cut = sp.length ? sp.reduce((a, b) => (Math.abs(b - text.length / 2) < Math.abs(a - text.length / 2) ? b : a)) : -1;
+      if (cut > 0) rows = [text.slice(0, cut), text.slice(cut + 1)];
+      fs = Math.max(11, Math.min(fs0, ...rows.map((t) => (fs0 * room) / width(t, fs0))));
+      y += y > (corner ? corner.bottom : 0) ? fs * 0.55 : 6; // under the buttons: the first row stays where it was; beside them: off the top edge
+    }
+  }
+  return { key: text + "|" + W + "|" + H, font: LYRIC_FONT(fs), rows, x: (x0 + x1) / 2, y, gap: fs * 1.15 };
+}
+function drawLyric() {
+  const ly = shotLyric ? { text: decodeURIComponent(shotLyric[1]), a: 1 } : radio && radio.lyric();
+  if (!ly) return;
+  ctx.save();
+  if (!lyricFit || lyricFit.key !== ly.text + "|" + W + "|" + H) lyricFit = fitLyric(ly.text); // once per line (and frame size)
+  const L = lyricFit;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = L.font;
+  ctx.shadowColor = `rgba(140,225,205,${0.6 * ly.a})`; ctx.shadowBlur = 14;
+  ctx.fillStyle = `rgba(238,246,255,${0.92 * ly.a})`;
+  L.rows.forEach((t, i) => ctx.fillText(t, L.x, L.y + (i - (L.rows.length - 1) / 2) * L.gap));
+  ctx.restore();
+}
+
 function draw() {
   const t = reduce ? 20 : now;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
   ctx.drawImage(bg, 0, 0, W, H);
   fireworks.draw(ctx, skyClip);
+  drawLyric();
   drawSurf(t);
   if (block) { ctx.globalAlpha = ferryAlpha(now); drawFerryWater(t); ctx.globalAlpha = 1; }
   const n = Math.min(line.length, cap); // anyone past the last place is over the horizon
@@ -1667,8 +1710,13 @@ sourceSel.onchange = () => { // a fresh start on the other source
 if (!shot) { // sound: the published sound (in the studio: this browser's workbench settings, if any); then
   // start / mute / volume, and in the studio the workbench
   const start = startingSound(studio).then((p) => { sonifier.setBlockParams(p); return p; });
-  const ensure = soundControls(sonifier, document.getElementById("mute"), document.getElementById("hint"), start);
-  if (studio) start.then((p) => workbench(sonifier, p, ensure, (ev) => testFerry(fullness(ev.size, ev.limit))));
+  // BCH Radio, if there are songs: it plays into the same volume control as the sonification
+  const radioP = radioSongs().then((songs) => (songs.length ? (radio = new Radio(songs, sonifier.context(), sonifier.volume)) : null));
+  const ensure = soundControls(sonifier, document.getElementById("mute"), document.getElementById("hint"), start, radioP, document.getElementById("radio"));
+  if (studio) {
+    start.then((p) => workbench(sonifier, p, ensure, (ev) => testFerry(fullness(ev.size, ev.limit))));
+    radioP.then((r) => r && import("./radiotiming.js").then((m) => m.radioTiming(r, ensure, document.getElementById("radioTiming"))));
+  }
 }
 
 // the lowest the sky (above the mountains) comes down between viewport x0 and x1: the donation window stays below it

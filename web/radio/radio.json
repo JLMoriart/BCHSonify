@@ -1,0 +1,503 @@
+{
+  "songs": [
+    {
+      "title": "Building and Scaling",
+      "file": "building-and-scaling.mp3",
+      "lines": [
+        {
+          "text": "Not a gamblin\u2019 man, they just built a casino",
+          "t": 15.72
+        },
+        {
+          "text": "On top of my money, like a corner in Reno",
+          "t": 19.89
+        },
+        {
+          "text": "When the chart bleeds red, I\u2019m surrounded by fear",
+          "t": 24.06
+        },
+        {
+          "text": "But I just want to pay for my coffee and beer",
+          "t": 27.74
+        },
+        {
+          "text": "Yes the price may rise, and then it may go down",
+          "t": 31.91
+        },
+        {
+          "text": "But mass adoption won\u2019t come from mopin' 'round",
+          "t": 36.01
+        },
+        {
+          "text": "Building and scaling and scaling and building",
+          "t": 40.37
+        },
+        {
+          "text": "Bitcoin Cash keeps rolling along",
+          "t": 44.22
+        },
+        {
+          "text": "Building and scaling and scaling and building",
+          "t": 48.47
+        },
+        {
+          "text": "We got a job to do, there\u2019s a path that we\u2019re on",
+          "t": 52.19
+        },
+        {
+          "text": "Let the tickers flash, let the headlines roll",
+          "t": 56.16
+        },
+        {
+          "text": "It\u2019s digital cash we\u2019re building for y\u2019all",
+          "t": 60.26,
+          "end": 70.95
+        },
+        {
+          "text": "It\u2019s for your barber, plumber, mechanic, and H-Vac",
+          "t": 72.03
+        },
+        {
+          "text": "The money that lets them take their wages back",
+          "t": 76.4
+        },
+        {
+          "text": "No money printer, no government needed",
+          "t": 80.42
+        },
+        {
+          "text": "Decentralized cash, yeah, nothing can beat it",
+          "t": 84.34
+        },
+        {
+          "text": "Crypto winter may come, and crypto winter may go",
+          "t": 88.19
+        },
+        {
+          "text": "But building freedom feels good in the sun or the cold",
+          "t": 92.19
+        },
+        {
+          "text": "Building and scaling and scaling and building",
+          "t": 96.56
+        },
+        {
+          "text": "Bitcoin Cash keeps rolling along",
+          "t": 100.46
+        },
+        {
+          "text": "Building and scaling and scaling and building",
+          "t": 104.5
+        },
+        {
+          "text": "We got a job to do, there\u2019s a path that we\u2019re on",
+          "t": 108.19
+        },
+        {
+          "text": "You want a number to watch, consider inflation",
+          "t": 112.16
+        },
+        {
+          "text": "An alternative for people of every nation",
+          "t": 116.56
+        },
+        {
+          "text": "When the mania fades and the speculators leave",
+          "t": 131.59
+        },
+        {
+          "text": "What\u2019s left is the users and the things that they need",
+          "t": 135.42
+        },
+        {
+          "text": "Sendin\u2019 money back home, low fees and no wait",
+          "t": 139.74
+        },
+        {
+          "text": "That\u2019s the metric I\u2019ll watch, and it\u2019s lookin\u2019 great",
+          "t": 143.18
+        },
+        {
+          "text": "Building and scaling and scaling and building",
+          "t": 149.95
+        },
+        {
+          "text": "Bitcoin Cash keeps rolling along",
+          "t": 153.88
+        },
+        {
+          "text": "Building and scaling and scaling and building",
+          "t": 157.77
+        },
+        {
+          "text": "We got a job to do, there\u2019s a path that we\u2019re on",
+          "t": 161.74
+        },
+        {
+          "text": "Hand it to your neighbor, send it \u2018cross the sea",
+          "t": 165.94
+        },
+        {
+          "text": "Money for the world that\u2019s open and free",
+          "t": 169.83,
+          "end": 180.74
+        }
+      ]
+    },
+    {
+      "title": "DeFi Cup of Tea (Use It As Money)",
+      "file": "defi-cup-of-tea-use-it-as-money.mp3",
+      "lines": [
+        {
+          "text": "They said it can\u2019t be done, you can\u2019t make Bitcoin smart",
+          "t": 16.65
+        },
+        {
+          "text": "Just use the EVM, it\u2019s got a huge head start",
+          "t": 20.74
+        },
+        {
+          "text": "But a little old coin with a stubborn, steady way",
+          "t": 25.5
+        },
+        {
+          "text": "Took its time getting ready for the DeFi workday",
+          "t": 29.07
+        },
+        {
+          "text": "Started from simple sends",
+          "t": 33.84
+        },
+        {
+          "text": "Now we here at the cutting edge",
+          "t": 37.36
+        },
+        {
+          "text": "We got DEXes and DAOs",
+          "t": 41.46
+        },
+        {
+          "text": "and ZK-proofs now",
+          "t": 43.34
+        },
+        {
+          "text": "We got derivatives, and stablecoins",
+          "t": 45.43
+        },
+        {
+          "text": "and staking pools that you can join",
+          "t": 47.99
+        },
+        {
+          "text": "And if that ain't your cup of tea",
+          "t": 50.2
+        },
+        {
+          "text": "Just use it as money",
+          "t": 53.44
+        },
+        {
+          "text": "The scaling\u2019s great, there\u2019s no issue there",
+          "t": 62.74
+        },
+        {
+          "text": "A 1000X advantage almost seems unfair",
+          "t": 66.62
+        },
+        {
+          "text": "UTXO local state",
+          "t": 70.39
+        },
+        {
+          "text": "And me?",
+          "t": 75.4
+        },
+        {
+          "text": "It\u2019s a date",
+          "t": 77.61
+        },
+        {
+          "text": "Just two main ingredients",
+          "t": 79.21
+        },
+        {
+          "text": "Tokens and covenants",
+          "t": 81.65
+        },
+        {
+          "text": "We got DEXes and DAOs",
+          "t": 84.91
+        },
+        {
+          "text": "and ZK-proofs now",
+          "t": 87.07
+        },
+        {
+          "text": "We got derivatives, and stablecoins",
+          "t": 88.95
+        },
+        {
+          "text": "and staking pools that you can join",
+          "t": 91.59
+        },
+        {
+          "text": "And if that ain't your cup of tea",
+          "t": 93.52
+        },
+        {
+          "text": "Just use it as money",
+          "t": 96.72
+        },
+        {
+          "text": "Years and years of \u201cnot today\u201d",
+          "t": 102.13
+        },
+        {
+          "text": "Ten more that they\u2019ve looked away",
+          "t": 106.25
+        },
+        {
+          "text": "We didn\u2019t rush, we didn\u2019t break",
+          "t": 109.39
+        },
+        {
+          "text": "We built the thing that\u2019s hard to fake",
+          "t": 113.47,
+          "end": 120.21
+        },
+        {
+          "text": "Proof of soul right there!",
+          "t": 125.45,
+          "end": 128.34
+        },
+        {
+          "text": "We got DEXes and DAOs",
+          "t": 134.16
+        },
+        {
+          "text": "and ZK-proofs now",
+          "t": 136.12
+        },
+        {
+          "text": "We got derivatives, and stablecoins",
+          "t": 138.24
+        },
+        {
+          "text": "and staking pools that you can join",
+          "t": 140.89
+        },
+        {
+          "text": "And if that ain't your cup of tea",
+          "t": 142.89
+        },
+        {
+          "text": "Just use it as money",
+          "t": 148.11
+        },
+        {
+          "text": "",
+          "t": null
+        },
+        {
+          "text": "",
+          "t": null
+        }
+      ]
+    },
+    {
+      "title": "Proud to Be a BCasher",
+      "file": "proud-to-be-a-bcasher.mp3",
+      "lines": [
+        {
+          "text": "They got a name for folks like me",
+          "t": 17.28
+        },
+        {
+          "text": "And they say it with mean spirits",
+          "t": 21.36
+        },
+        {
+          "text": "The bad blood down there runs deep",
+          "t": 25.22
+        },
+        {
+          "text": "And I know deep down they fear us",
+          "t": 29.43
+        },
+        {
+          "text": "But it don\u2019t change a thing",
+          "t": 32.99
+        },
+        {
+          "text": "about our work and what we\u2019re building",
+          "t": 37.41
+        },
+        {
+          "text": "I\u2019ll wear the label proudly",
+          "t": 40.85
+        },
+        {
+          "text": "Soon you\u2019ll see that we\u2019re the real thing",
+          "t": 45.34
+        },
+        {
+          "text": "Yes sir I'm proud to be a BCasher",
+          "t": 49.47
+        },
+        {
+          "text": "Cuz Bitcoin was meant to be cash",
+          "t": 53.72
+        },
+        {
+          "text": "For the farmer, the baker, the folks on Main",
+          "t": 56.88
+        },
+        {
+          "text": "A little more freedom in every exchange",
+          "t": 61.17
+        },
+        {
+          "text": "Yes sir I'm proud to be a BCasher",
+          "t": 65.66
+        },
+        {
+          "text": "Cuz Bitcoin was meant to be cash",
+          "t": 70.03
+        },
+        {
+          "text": "From the corner store to the county line",
+          "t": 73.67
+        },
+        {
+          "text": "Sound money\u2019s gonna work just fine",
+          "t": 78.08
+        },
+        {
+          "text": "I\u2019ve seen my fair share of flame wars",
+          "t": 82.82
+        },
+        {
+          "text": "Even started one or two",
+          "t": 86.51
+        },
+        {
+          "text": "But when the name calling starts?",
+          "t": 90.75
+        },
+        {
+          "text": "Back to work, got a job to do",
+          "t": 93.83
+        },
+        {
+          "text": "If someone\u2019s got to do it",
+          "t": 97.52
+        },
+        {
+          "text": "that someone might as well be you",
+          "t": 101.97
+        },
+        {
+          "text": "It\u2019s our turn to build the future",
+          "t": 105.34
+        },
+        {
+          "text": "Now come on and let me hear you",
+          "t": 109.91
+        },
+        {
+          "text": "Yes ma'am I'm proud to be a BCasher",
+          "t": 113.72
+        },
+        {
+          "text": "Cuz Bitcoin was meant to be cash",
+          "t": 118.32
+        },
+        {
+          "text": "For the coffee, the groceries, the things that we need",
+          "t": 121.33
+        },
+        {
+          "text": "A little more freedom in every receipt",
+          "t": 125.66
+        },
+        {
+          "text": "Yes ma'am I'm proud to be a BCasher",
+          "t": 129.91
+        },
+        {
+          "text": "Cuz Bitcoin was meant to be cash",
+          "t": 134.4
+        },
+        {
+          "text": "For a tank of gas and a sack of seed",
+          "t": 137.96
+        },
+        {
+          "text": "Good honest money is all we need",
+          "t": 142.02
+        },
+        {
+          "text": "And you can call it BCash, that don\u2019t bother me one bit",
+          "t": 145.58
+        },
+        {
+          "text": "But for me, I call it Bitcoin Cash, that\u2019s the name we gave it when we split",
+          "t": 153.35
+        },
+        {
+          "text": "I can reclaim BCasher for myself, but the chain has got no kings",
+          "t": 161.26
+        },
+        {
+          "text": "That\u2019s why I call it Bitcoin Cash, now everyone together sing",
+          "t": 169.55
+        },
+        {
+          "text": "Good gosh I'm proud to be a BCasher",
+          "t": 177.89
+        },
+        {
+          "text": "Cuz Bitcoin was meant to be cash",
+          "t": 182.42
+        },
+        {
+          "text": "For the times when the payment has got to go through",
+          "t": 185.55
+        },
+        {
+          "text": "A little more freedom in the rails you use",
+          "t": 189.47
+        },
+        {
+          "text": "Golly I'm proud to be a BCasher",
+          "t": 193.84
+        },
+        {
+          "text": "Cuz Bitcoin was meant to be cash",
+          "t": 198.21
+        },
+        {
+          "text": "Protect what's yours in this crazy world",
+          "t": 202.26
+        },
+        {
+          "text": "Peer to peer cash for every boy and girl",
+          "t": 205.82
+        },
+        {
+          "text": "Proud to be a BCasher",
+          "t": 209.11
+        },
+        {
+          "text": "Proud to be a BCasher",
+          "t": 216.88
+        },
+        {
+          "text": "Yes I'm proud to be a BCasher\u2026",
+          "t": 223.86,
+          "end": 238.16
+        }
+      ]
+    }
+  ]
+}

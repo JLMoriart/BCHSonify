@@ -12,3 +12,8 @@ presets/debug/
 
 # vendor build tools (tools/vendor: npm ci --ignore-scripts)
 node_modules/
+
+# BCH Radio: the songs (songs/ is the source; tools/make_radio.py copies them to web/radio/, deploy_web.sh to the
+# server). Kept out of this public repository.
+songs/
+web/radio/*.mp3
