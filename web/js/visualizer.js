@@ -1994,7 +1994,7 @@ if (!shot) { // sound: the published sound (in the studio: this browser's workbe
   const start = startingSound(studio).then((p) => { sonifier.setBlockParams(p); return p; });
   // BCH Radio, if there are songs: it plays into the same volume control as the sonification
   const radioP = radioSongs().then((songs) => (songs.length ? (radio = new Radio(songs, sonifier.context(), sonifier.volume, () => sonifier.serverNow())) : null));
-  const ensure = soundControls(sonifier, document.getElementById("mute"), document.getElementById("hint"), start, radioP, document.getElementById("radio"), document.getElementById("radioLink"));
+  const ensure = soundControls(sonifier, document.getElementById("mute"), document.getElementById("hint"), start, radioP, document.getElementById("radio"));
   if (studio) {
     start.then((p) => workbench(sonifier, p, ensure, (ev) => testFerry(fullness(ev.size, ev.limit))));
     radioP.then((r) => r && import("./radiotiming.js").then((m) => m.radioTiming(r, ensure, document.getElementById("radioTiming"))));
