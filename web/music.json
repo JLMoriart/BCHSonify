@@ -1,0 +1,26 @@
+{
+  "price": 10000,
+  "tracks": [
+    {
+      "id": "building-and-scaling",
+      "title": "Building and Scaling",
+      "mp3": "radio/building-and-scaling.mp3",
+      "seconds": 194.4,
+      "wavBytes": 37338628
+    },
+    {
+      "id": "defi-cup-of-tea-use-it-as-money",
+      "title": "DeFi Cup of Tea (Use It As Money)",
+      "mp3": "radio/defi-cup-of-tea-use-it-as-money.mp3",
+      "seconds": 173.8,
+      "wavBytes": 33383428
+    },
+    {
+      "id": "proud-to-be-a-bcasher",
+      "title": "Proud to Be a BCasher",
+      "mp3": "radio/proud-to-be-a-bcasher.mp3",
+      "seconds": 242.4,
+      "wavBytes": 46554618
+    }
+  ]
+}

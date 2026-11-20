@@ -5,6 +5,8 @@
 #   - the firewall opens 80 (certificates, and redirecting http to https) and 443
 #   - the visitors' files from web/ go to /var/www/bchsonify, swapped in all at once. Not the studio
 #     (studio.html and the old addresses that forward to it) or the test pages (web/_*).
+#   - the music shop's .wav files (shop/wav/, from tools/make_music.py) go to /var/lib/bchsonify-wav, off the
+#     public site: Caddy serves one only when the shop says it's a paid order's (see Caddyfile)
 # Only what changed is uploaded: the server keeps a copy of the site (/var/www/bchsonify.stage) that rsync
 # brings up to date, and the live site is made from it (hard links: no copying) and swapped in. So the
 # songs (megabytes) go up once, not on every deploy.
@@ -17,7 +19,8 @@ VPS=${BCHSONIFY_VPS:?set BCHSONIFY_VPS=user@host (env or run_node.env)}
 SITE=${BCHSONIFY_SITE:?set BCHSONIFY_SITE=the site address, e.g. example.com (env or run_node.env)}
 [[ $SITE =~ ^[a-z0-9.-]+$ ]] || { echo "BCHSONIFY_SITE should be a plain host name, like example.com"; exit 1; }
 
-FILES=(index.html css js vendor donate donate.json sound.json radio) # in web/: what visitors get
+FILES=(index.html music.html css js vendor donate donate.json sound.json radio music.json) # in web/: what visitors get
+WAV=/var/lib/bchsonify-wav
 LIVE=/var/www/bchsonify STAGE=/var/www/bchsonify.stage
 
 # 1. the server ready: Caddy, the firewall, and the copy to update (the first time: from the live site)
@@ -31,13 +34,17 @@ if ! command -v caddy >/dev/null; then
 fi
 command -v rsync >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq rsync >/dev/null
 ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; ufw allow 443/udp >/dev/null
-if [ ! -d $STAGE ]; then if [ -d $LIVE ]; then cp -a $LIVE $STAGE; else install -d -m 755 $STAGE; fi; fi"
+if [ ! -d $STAGE ]; then if [ -d $LIVE ]; then cp -a $LIVE $STAGE; else install -d -m 755 $STAGE; fi; fi
+install -d -m 755 $WAV"
 
 # 2. the copy made exactly the listed files (what changed is sent; anything else there is removed)
 filters=(--exclude='_*')
 for f in "${FILES[@]}"; do filters+=(--include="/$f" --include="/$f/***"); done
 filters+=(--exclude='*')
 rsync -rlptz --delete --delete-excluded --chmod=D755,F644 "${filters[@]}" --out-format='  sent %n' ../web/ "$VPS:$STAGE/"
+if [ -d ../shop/wav ]; then # the .wavs for sale (uploaded once each, then only when changed)
+  rsync -rlpt --delete --chmod=D755,F644 --info=progress2 --out-format='  sent %n' ../shop/wav/ "$VPS:$WAV/"
+fi
 
 # 3. the live site swapped for a hard-linked copy of it, and Caddy's configuration
 sed "s|{SITE}|$SITE|" Caddyfile | ssh "$VPS" "set -e

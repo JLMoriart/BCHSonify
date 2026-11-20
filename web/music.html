@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spirits of Bitcoin Music</title>
+<meta name="description" content="Songs from Spirits of Bitcoin: stream and download the mp3s free, or buy the full-quality .wav with Bitcoin Cash.">
+<!-- The music page: every track streams and downloads free as an mp3; its .wav sells for BCH (js/music.js, and the
+     shop in the relay: server/shop.py). The track list is music.json (tools/make_music.py). -->
+<link rel="stylesheet" href="css/scene.css">
+<link rel="stylesheet" href="css/music.css">
+</head>
+<body class="music">
+<div class="layout">
+  <main>
+    <header>
+      <a class="back" href="./">← The ferry line</a>
+      <h1>Spirits of Bitcoin <span>Music</span></h1>
+      <p class="dim">Stream any song here. Download the mp3s free, or buy the full-quality .wav files with Bitcoin Cash.</p>
+    </header>
+    <div class="bulk">
+      <div class="offer"><a id="allMp3" class="button" href="radio/spirits-of-bitcoin-mp3s.zip" download="Spirits of Bitcoin (mp3).zip">Download all mp3s</a><span class="note">Lower quality, free</span></div>
+      <div class="offer paid"><button id="allWav" class="primary" type="button">Purchase all wavs</button><span id="allWavNote" class="note"></span></div>
+    </div>
+    <ol id="tracks" class="tracks" aria-label="Tracks"></ol>
+    <p id="loadError" class="dim" hidden>The track list couldn't load. Try reloading the page.</p>
+    <section id="owned" class="owned" hidden>
+      <h2>Your purchases</h2>
+      <p class="dim">Kept in this browser. To download them somewhere else, open an order's link there.</p>
+      <ul id="ownedList"></ul>
+    </section>
+  </main>
+  <aside id="cart" class="cart" aria-labelledby="cartTitle">
+    <button id="cartToggle" class="cart-toggle" type="button" aria-expanded="false"><span>Cart</span> <span id="cartCount" class="count">0</span> <span id="cartBarTotal" class="dim"></span></button>
+    <div class="cart-body">
+      <h2 id="cartTitle">Cart</h2>
+      <ul id="cartList" class="cart-list"></ul>
+      <p id="cartEmpty" class="dim">Empty. Add tracks to buy several in one payment.</p>
+      <div id="cartFoot" class="cart-foot" hidden>
+        <div class="total"><span>Total</span> <strong id="cartTotal"></strong></div>
+        <button id="checkout" class="primary" type="button">Check out</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<dialog id="pay" class="pay" aria-labelledby="payTitle">
+  <h2 id="payTitle">Pay with Bitcoin Cash</h2>
+  <button class="close" type="button" aria-label="Close">×</button>
+  <ul id="payTracks" class="pay-tracks"></ul>
+  <div id="payWait">
+    <div id="payQr" class="qr" aria-label="QR code to pay this order"></div>
+    <div class="amount"><strong id="payAmount"></strong> <span id="payBch" class="dim"></span></div>
+    <div class="row"><code id="payAddress"></code></div>
+    <div class="row"><a id="payOpen" class="button primary" href="#">Open in a wallet</a><button id="payCopy" type="button">Copy address</button><button id="payCopyAmount" type="button">Copy amount</button></div>
+    <p id="payStatus" class="status" role="status"></p>
+  </div>
+  <div id="payDone" hidden>
+    <p class="paid">Paid. Thank you!</p>
+    <ul id="payDownloads" class="downloads"></ul>
+    <p class="dim">Your purchase is saved in this browser. To download it on another device, or after clearing this browser's data, keep this link:</p>
+    <div class="row"><code id="payLink"></code></div>
+    <div class="row"><button id="payCopyLink" type="button">Copy link</button></div>
+  </div>
+  <p id="payError" class="error" role="alert" hidden></p>
+</dialog>
+
+<audio id="player" preload="none"></audio>
+<script type="module" src="js/music.js"></script>
+</body>
+</html>

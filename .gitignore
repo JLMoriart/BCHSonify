@@ -17,3 +17,5 @@ node_modules/
 # server). Kept out of this public repository.
 songs/
 web/radio/*.mp3
+web/radio/*.zip
+shop/

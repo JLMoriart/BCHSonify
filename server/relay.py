@@ -40,6 +40,9 @@ Node lookups go through --cli (a bitcoin-cli command prefix): getrawmempool
 true, getrawmempool, getblock <hash> 1. Without --cli there are no fees, block
 sizes or block contents, and "mempool" stays empty.
 
+With --xpub, the relay also runs the music shop (shop.py): orders paid to addresses from that wallet key,
+watched for in every new transaction, and its HTTP API on --shop-port.
+
 Needs python3-zmq and python3-websockets.
 """
 import argparse
@@ -98,12 +101,13 @@ def cashaddr_script(addr):
     raise ValueError(f"unsupported CashAddress: {addr}")
 
 
-def parse_tx(raw, donate=None):
+def parse_tx(raw, donate=None, watch=()):
     """(output values in sats, flags) of a serialized BCH transaction.
     Token (CashTokens) outputs count by the BCH they hold; OP_RETURN outputs are 0.
     flags: {"nft": True} / {"ft": True} if any output holds an NFT / fungible
     tokens, {"memo": True} if any output is an OP_RETURN, {"donation": sats} for
-    what it pays to the locking script `donate` (bytes), if any."""
+    what it pays to the locking script `donate` (bytes), if any, and {"pays": {script: sats}} for what it pays
+    to any of the locking scripts in `watch` (the shop's orders; not for publishing)."""
     i = 4  # version
     n_in, i = _varint(raw, i)
     for _ in range(n_in):
@@ -130,6 +134,9 @@ def parse_tx(raw, donate=None):
             flags["memo"] = True
         if donate and raw[j:end] == donate and values[-1] > 0:
             flags["donation"] = flags.get("donation", 0) + values[-1]
+        if watch and raw[j:end] in watch and values[-1] > 0:
+            pays = flags.setdefault("pays", {})
+            pays[raw[j:end]] = pays.get(raw[j:end], 0) + values[-1]
         i = end
     return values, flags
 
@@ -153,6 +160,8 @@ class Relay:
         self.queue = asyncio.Queue()  # events from the node, in order, awaiting their lookups
         self.rest_until = 0.0
         self.donate = None  # the donation address's locking script (bytes), if watching for donations
+        self.shop = None    # the music shop (shop.Shop), with --xpub
+        self.catch_up_on_block = False  # the shop's scan for payments made while away, again at the next block
 
     def seed(self, mempool):
         """Start from the node's mempool (`getrawmempool true`): already waiting, never announced."""
@@ -252,6 +261,9 @@ class Relay:
             except Exception as e:  # noqa: BLE001
                 print(f"block {hash_[:16]}: couldn't check the mempool ({e!r})", flush=True)
         self.publish(ev)
+        if self.shop and self.catch_up_on_block:  # a payment made while the relay was down, mined by now
+            self.catch_up_on_block = False
+            asyncio.create_task(self.shop.catch_up(self.rpc))
         print(f"block {hash_[:16]}  size={ev.get('size')} limit={ev.get('limit')}  took={len(ev.get('txids', []))} "
               f"dropped={len(ev.get('dropped', []))} waiting={len(self.pending)}  clients={len(self.clients)}", flush=True)
 
@@ -298,10 +310,13 @@ class Relay:
                 continue
             self.seen.add(txid)
             try:
-                outs, flags = parse_tx(body, self.donate)
+                outs, flags = parse_tx(body, self.donate, self.shop.scripts if self.shop else ())
             except (IndexError, KeyError):
                 print(f"couldn't parse tx {txid}; skipped", flush=True)
                 continue
+            pays = flags.pop("pays", None)
+            if pays:
+                self.shop.paid(txid, pays)
             self.queue.put_nowait({"type": "tx", "t": now, "txid": txid, "outputs": outs, "size": len(body), **flags})
 
 
@@ -315,6 +330,10 @@ async def main():
     p.add_argument("--cli", help="bitcoin-cli command prefix, e.g. 'sudo -n -u bitcoin bitcoin-cli -conf=...'; "
                                  "used for getrawmempool [true] and getblock <hash> 1")
     p.add_argument("--donate", help="the site's donation CashAddress: transactions paying it are marked \"donation\"")
+    p.add_argument("--xpub", help="run the music shop: the sales wallet's account extended public key")
+    p.add_argument("--shop-catalog", default="/var/www/bchsonify/music.json", help="the shop's track list and price")
+    p.add_argument("--shop-state", default="/var/lib/bchsonify/shop.json", help="where the shop keeps its orders")
+    p.add_argument("--shop-port", type=int, default=8766, help="the shop's HTTP port (on --host)")
     a = p.parse_args()
 
     cli = shlex.split(a.cli) if a.cli else None
@@ -326,6 +345,15 @@ async def main():
         out = subprocess.run([*cli, "getrawmempool", "true"], capture_output=True, text=True, check=True).stdout
         relay.seed(json.loads(out))
         print(f"relay: {len(relay.pending)} txs already waiting in the mempool", flush=True)
+    if a.xpub:
+        from shop import Shop
+        relay.shop = Shop(a.xpub, a.shop_catalog, a.shop_state)
+        relay.shop_server = await asyncio.start_server(relay.shop.http, a.host, a.shop_port)
+        print(f"relay: shop on http://{a.host}:{a.shop_port}, {len(relay.shop.orders)} orders, "
+              f"next address 0/{relay.shop.next_index}", flush=True)
+        if cli:
+            asyncio.create_task(relay.shop.catch_up(relay.rpc))
+            relay.catch_up_on_block = True
     async with websockets.serve(relay.handler, a.host, a.port):
         print(f"relay: serving ws://{a.host}:{a.port}", flush=True)
         worker = asyncio.create_task(relay.worker())  # noqa: F841 -- held so it isn't garbage-collected

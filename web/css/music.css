@@ -1,0 +1,105 @@
+/* The music page (music.html): the track list, the cart on the right (a bar along the bottom on narrow
+   screens), and the payment window. Colours and buttons come from scene.css. */
+body.music { min-height: 100vh; background: radial-gradient(ellipse 120% 60% at 30% -10%, #1b2545 0%, var(--night) 60%) fixed, var(--night); }
+.music a { color: var(--soul); }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; max-width: 1180px; margin: 0 auto; padding: 24px 24px 48px; box-sizing: border-box; }
+header { margin-bottom: 18px; }
+.back { font-size: 13px; text-decoration: none; color: var(--muted) !important; }
+.back:hover { color: var(--soul) !important; }
+h1 { margin: 10px 0 6px; font-size: 28px; letter-spacing: 0.01em; }
+h1 span { color: var(--soul); font-weight: 500; }
+header p { margin: 0; max-width: 60ch; }
+header strong { color: var(--ink); }
+h2 { font-size: 16px; margin: 0 0 8px; }
+
+/* ---- the tracks */
+.tracks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.track { display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-areas: "play info" "actions actions"; gap: 10px 14px; align-items: center;
+  padding: 12px 14px; background: rgba(20,27,46,0.78); border: 1px solid var(--rule); border-radius: 10px; }
+.track.playing { border-color: rgba(205,244,255,0.45); box-shadow: 0 0 22px rgba(205,244,255,0.07); }
+.track .play { grid-area: play; width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; border-color: rgba(205,244,255,0.4); }
+.track .play svg { width: 18px; height: 18px; fill: var(--soul); }
+.track.playing .play { background: rgba(205,244,255,0.12); }
+.track .info { grid-area: info; min-width: 0; }
+.track .title { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track .seek { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.track .seek input { flex: 1; min-width: 60px; margin: 0; accent-color: var(--soul); height: 16px; }
+.track .actions { grid-area: actions; }
+/* the free mp3 on the left, a divide, then buying the .wav */
+.actions, .bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 0; }
+.offer { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.offer.paid { margin-left: 16px; padding-left: 16px; border-left: 1px solid var(--rule); }
+.offer a, .offer button { white-space: nowrap; font-size: 13px; }
+.note { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note .line { display: block; }
+.bulk { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; background: rgba(20,27,46,0.5); }
+.bulk .offer { flex: 1 1 auto; }
+.bulk .offer.paid { flex: 0 1 auto; flex-wrap: nowrap; }
+/* too narrow for the two halves side by side: one above the other, the divide horizontal */
+main { container-type: inline-size; }
+@container (max-width: 780px) {
+  .actions, .bulk { flex-direction: column; align-items: stretch; }
+  .offer.paid { margin: 10px 0 0; padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--rule); }
+  .bulk .offer.paid { flex-wrap: wrap; }
+}
+a.button { display: inline-block; color: var(--ink) !important; text-decoration: none; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; background: var(--panel); font-size: 14px; }
+a.button:hover { border-color: var(--muted); }
+a.button.primary { border-color: var(--soul); color: var(--soul) !important; }
+.track .incart { border-color: rgba(205,244,255,0.45); color: var(--soul); }
+.track .owned-tag { font-size: 12px; color: #9fe8c0; }
+
+/* ---- the cart: a column on the right */
+.cart { position: sticky; top: 24px; align-self: start; background: rgba(20,27,46,0.85); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px 16px; }
+.cart-toggle { display: none; }
+.cart-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cart-list li { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.cart-list .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cart-list .sats { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cart-list button { padding: 0 8px; line-height: 22px; font-size: 15px; }
+.cart-body > p { margin: 0; font-size: 13px; }
+.cart-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule); display: grid; gap: 10px; }
+.cart-foot .total { display: flex; justify-content: space-between; align-items: baseline; font-variant-numeric: tabular-nums; }
+.cart-foot .total strong { font-size: 15px; }
+.cart-foot button { width: 100%; padding: 9px 12px; font-weight: 600; }
+.count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--soul); color: var(--night); font-size: 12px; font-weight: 700; }
+.count:empty, .count[data-n="0"] { background: var(--rule); color: var(--muted); }
+
+/* ---- what this browser has bought */
+.owned { margin-top: 28px; }
+.owned p { margin: 0 0 8px; font-size: 13px; }
+.owned ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.owned li { padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; background: rgba(20,27,46,0.6); font-size: 13px; }
+.owned li .links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; }
+
+/* ---- the payment window */
+dialog.pay { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; box-sizing: border-box; padding: 16px 18px 18px; color: var(--ink);
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); }
+dialog.pay::backdrop { background: rgba(5,8,18,0.6); }
+.pay h2 { margin: 0 0 8px; padding-right: 36px; font-size: 18px; }
+.pay .close { position: absolute; top: 12px; right: 12px; padding: 0 9px; font-size: 18px; line-height: 26px; }
+.pay-tracks { margin: 0 0 10px; padding-left: 18px; font-size: 13px; color: var(--muted); }
+.pay .qr { width: 200px; height: 200px; margin: 6px auto 0; background: #fff; border-radius: 8px; padding: 6px; box-sizing: content-box; }
+.pay .qr svg { width: 100%; height: 100%; display: block; }
+.pay .amount { text-align: center; margin-top: 10px; font-size: 17px; font-variant-numeric: tabular-nums; }
+.pay .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+.pay code { font: 12px ui-monospace, monospace; color: var(--muted); overflow-wrap: anywhere; text-align: center; }
+.pay .status { text-align: center; margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+.pay .status.got { color: #ffe3ad; }
+.pay .paid { font-size: 17px; font-weight: 600; color: #9fe8c0; margin: 4px 0 10px; }
+.pay .downloads { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.pay .downloads a { display: block; text-align: center; }
+.pay > p.dim { font-size: 13px; }
+.pay .error { color: #ffb4a8; font-size: 13px; text-align: center; margin: 10px 0 0; }
+
+/* ---- narrow screens: the tracks' buttons under their titles, and the cart a bar along the bottom that opens upward */
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); padding: 16px 16px 96px; }
+  .cart { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 3; border-radius: 12px 12px 0 0; padding: 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 0 -8px 30px rgba(0,0,0,0.45); }
+  .cart-toggle { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; border-radius: 12px 12px 0 0; background: transparent; padding: 14px 16px; font-weight: 600; }
+  .cart-toggle::after { content: "▴"; margin-left: auto; color: var(--muted); }
+  .cart.open .cart-toggle::after { content: "▾"; }
+  .cart-body { display: none; padding: 0 16px 16px; max-height: 55vh; overflow: auto; }
+  .cart.open .cart-body { display: block; }
+  .cart-body h2 { display: none; }
+}
