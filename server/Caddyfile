@@ -1,7 +1,8 @@
 # BCHSonify's site (installed by deploy_web.sh, which fills in {SITE}): the visitors' pages and their files,
 # the relay's live feed at /ws, and the music shop (server/shop.py, in the relay): its API at /shop/, and the
 # paid .wav files at /dl/<order>/<key>/<track>.wav, each download allowed only after asking the shop.
-# Caddy gets and renews the https certificate itself.
+# Caddy gets and renews the https certificate itself. Other addresses for the site (BCHSONIFY_REDIRECTS: www, an
+# old domain) are added by deploy_web.sh after this, each redirecting to the same page here.
 {SITE} {
 	encode zstd gzip
 	# check back on every visit (cheap: unchanged files answer "not modified"), so a deploy shows up at once

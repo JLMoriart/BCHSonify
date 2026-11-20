@@ -13,13 +13,17 @@
 # brings up to date, and the live site is made from it (hard links: no copying) and swapped in. So the
 # songs (megabytes) go up once, not on every deploy.
 # Server login from BCHSONIFY_VPS and the site's address from BCHSONIFY_SITE (env or ../run_node.env),
-# e.g. BCHSONIFY_SITE=example.com. Its DNS must already point at the server, for the certificate.
+# e.g. BCHSONIFY_SITE=example.com, and other addresses that redirect to it from BCHSONIFY_REDIRECTS (optional,
+# space-separated, e.g. "www.example.com old.example.org"). Their DNS must already point at the server, for
+# the certificates.
 set -euo pipefail
 cd "$(dirname "$0")"
 [ -f ../run_node.env ] && . ../run_node.env
 VPS=${BCHSONIFY_VPS:?set BCHSONIFY_VPS=user@host (env or run_node.env)}
 SITE=${BCHSONIFY_SITE:?set BCHSONIFY_SITE=the site address, e.g. example.com (env or run_node.env)}
 [[ $SITE =~ ^[a-z0-9.-]+$ ]] || { echo "BCHSONIFY_SITE should be a plain host name, like example.com"; exit 1; }
+REDIRECTS=${BCHSONIFY_REDIRECTS:-}
+for h in $REDIRECTS; do [[ $h =~ ^[a-z0-9.-]+$ ]] || { echo "BCHSONIFY_REDIRECTS: '$h' should be a plain host name"; exit 1; }; done
 
 FILES=(index.html music.html css js vendor donate donate.json sound.json radio music.json) # in web/: what visitors get
 WAV=/var/lib/bchsonify-wav
@@ -53,7 +57,10 @@ fi
 
 # 3. the mp3s made there, the live site swapped for a hard-linked copy of the copy, and Caddy's configuration
 scp -q make_mp3s.py "$VPS":/tmp/make_mp3s.py
-sed "s|{SITE}|$SITE|" Caddyfile | ssh "$VPS" "set -e
+{ sed "s|{SITE}|$SITE|" Caddyfile
+  [ -z "$REDIRECTS" ] || printf '\n# other addresses for the site: to the same page at %s\n%s {\n\tredir https://%s{uri} permanent\n}\n' \
+    "$SITE" "$(echo $REDIRECTS | sed 's/ /, /g')" "$SITE"
+} | ssh "$VPS" "set -e
 cat > /tmp/Caddyfile
 [ ! -f $STAGE/music.json ] || python3 /tmp/make_mp3s.py $STAGE $WAV
 rm -f /tmp/make_mp3s.py
