@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 import engine as e  # noqa: E402
 
-TOP_BCH, STEP, MAX_HOLD, SKEW, F0, PHON = 2100, 1 / 2, 1200, 0.25, 30, 80
+TOP_BCH, STEP, MAX_HOLD, SKEW, F0, PHON = 2100, 1 / 2, 1200, 1 / 5, 30, 80
 
 
 def py_values(amounts):

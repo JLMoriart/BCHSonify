@@ -561,7 +561,7 @@ def make_parser():
                    help="maxTime: seconds held by outputs >= --top-bch (hold = maxTime*(amount/top)^skew)")
     p.add_argument("--block-hold", type=float, default=300,
                    help="seconds the block note holds (default 300: half the 10-minute block target)")
-    p.add_argument("--skew", type=float, default=1 / 4, help="skewFactor in the hold formula (default 1/4)")
+    p.add_argument("--skew", type=float, default=1 / 5, help="skewFactor in the hold formula (default 1/5: fifth root)")
     p.add_argument("--top-bch", type=float, default=TOP_SATS / SATS_PER_BCH,
                    help=f"outputs >= this play harmonic {FIRST_HARMONIC} (default 2100)")
     p.add_argument("--step", type=float, default=STEP,

@@ -11,7 +11,7 @@ export const CONFIG = {
   firstHarmonic: 2,    // harmonic for outputs >= topBch
   blockHarmonic: 1,    // the block note
   maxHold: 1200,       // s, hold for outputs >= topBch: maxHold * (amount/top)^skew
-  skew: 0.25,
+  skew: 0.2,           // fifth root
   blockTarget: 600,    // s, BCH's block interval target; a block holds blockTarget * (size / size limit)^blockSkew
   blockSkew: 1 / 3,    // cube root: small blocks (the usual case) hold much longer than in proportion
   blockHoldUnknown: 300, // s, the hold for a block that arrives without its size or limit
