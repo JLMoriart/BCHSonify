@@ -22,7 +22,15 @@ export function soundControls(s, muteBtn, hint, ready, radioP = Promise.resolve(
     else if (!s.playing) s.start();
     if (playing()) hint.hidden = true;
   });
-  ctx.onstatechange = begin;
+  // A press that lets the browser start sound: the first that does (the context then runs) ends the waiting.
+  // Not just the first press: on a touchscreen, pointerdown comes before the browser counts the touch as one
+  // (a finger going down may be a scroll), so it can't start sound; the touchend or click after it can.
+  const presses = ["pointerdown", "pointerup", "touchend", "click", "keydown"];
+  const press = () => { ctx.resume().then(begin, () => {}); };
+  ctx.onstatechange = () => {
+    if (ctx.state === "running") for (const e of presses) window.removeEventListener(e, press, true);
+    begin();
+  };
   if (radioBtn) radioBtn.hidden = true;
   radioP.then((r) => {
     radio = r;
@@ -40,16 +48,12 @@ export function soundControls(s, muteBtn, hint, ready, radioP = Promise.resolve(
   });
   ctx.resume().catch(() => {});
   setTimeout(() => { if (!playing() && !muted) hint.hidden = false; }, 500);
-  const gesture = () => {
-    for (const e of ["pointerdown", "keydown", "touchend"]) window.removeEventListener(e, gesture, true);
-    ctx.resume().then(begin);
-  };
-  for (const e of ["pointerdown", "keydown", "touchend"]) window.addEventListener(e, gesture, true);
+  for (const e of presses) window.addEventListener(e, press, true);
 
   muteBtn.onclick = () => {
     muted = !muted;
     muteBtn.textContent = muted ? "Unmute" : "Mute";
-    if (muted) { s.stop(); if (radio) radio.stop(); setTimeout(() => { if (muted) ctx.suspend(); }, 300); }  // suspended: no audio CPU
+    if (muted) { hint.hidden = true; s.stop(); if (radio) radio.stop(); setTimeout(() => { if (muted) ctx.suspend(); }, 300); }  // suspended: no audio CPU
     else ctx.resume().then(begin);
   };
   const ensure = () => (muted ? Promise.resolve() : ctx.resume().then(begin));
