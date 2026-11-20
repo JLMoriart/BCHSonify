@@ -19,3 +19,4 @@ songs/
 web/radio/*.mp3
 web/radio/*.zip
 shop/
+web/radio/_mp3s.json

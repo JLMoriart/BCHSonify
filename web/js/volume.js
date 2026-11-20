@@ -15,10 +15,17 @@ function saved() {
 const style = document.createElement("style");
 style.textContent = `
   label.volume { display: inline-flex; gap: 8px; align-items: center; color: var(--dim); }
-  label.volume input { width: 140px; accent-color: var(--accent); margin: 0; }
-  /* the slider, with a mark under the track where 0 dB is (--at: its place along the track, 0..1; the
-     thumb's centre only travels between half a thumb from each end) */
+  /* the slider, drawn here (not the browser's own: thumbs differ in size between browsers, and the 0 dB mark
+     has to sit under the thumb's centre). The thumb's centre travels from half a thumb (--thumb) in from one
+     end to half a thumb from the other; --frac: the value's place along the track, 0..1, for the filled part */
   label.volume .track { position: relative; display: inline-flex; --thumb: 16px; }
+  label.volume input { -webkit-appearance: none; appearance: none; width: 140px; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+  label.volume input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px;
+    background: linear-gradient(to right, var(--accent) calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--frac, 0)), rgba(230,235,243,0.3) 0); }
+  label.volume input::-webkit-slider-thumb { -webkit-appearance: none; width: var(--thumb); height: var(--thumb); margin-top: -5px; border: 0; border-radius: 50%; background: var(--accent); }
+  label.volume input::-moz-range-track { height: 6px; border-radius: 3px; background: rgba(230,235,243,0.3); }
+  label.volume input::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--accent); }
+  label.volume input::-moz-range-thumb { width: var(--thumb); height: var(--thumb); border: 0; border-radius: 50%; background: var(--accent); }
   label.volume .zero { position: absolute; top: calc(100% + 1px); width: 2px; height: 5px; margin-left: -1px; border-radius: 1px;
     left: calc(var(--thumb) / 2 + (100% - var(--thumb)) * var(--at)); background: var(--accent); opacity: 0.75; pointer-events: none; }
   label.volume output { font-variant-numeric: tabular-nums; min-width: 4.5em; color: var(--fg); }
@@ -37,7 +44,10 @@ export function volumeControl(sonifier, after) {
   zero.style.setProperty("--at", (VOLUME.def - VOLUME.min) / (VOLUME.max - VOLUME.min));
   track.append(input, zero);
   label.append(track, out);
-  const show = (db) => { out.textContent = `${db > 0 ? "+" : db < 0 ? "−" : ""}${Math.abs(db).toFixed(1)} dB`; };
+  const show = (db) => {
+    input.style.setProperty("--frac", (db - VOLUME.min) / (VOLUME.max - VOLUME.min)); // (the filled part, in Chrome and Safari)
+    out.textContent = `${db > 0 ? "+" : db < 0 ? "−" : ""}${Math.abs(db).toFixed(1)} dB`;
+  };
   const db = saved();
   input.value = db; show(db);
   sonifier.setVolume(db);

@@ -16,6 +16,7 @@ const LEAD = 3; // s: clicking a line plays from this long before it
 
 export function radioTiming(radio, ensure, box) {
   box.hidden = false;
+  radio.synced = false; // (here: any song, from anywhere, not where every visitor is)
   const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids); return e; };
   const songSel = el("select");
   radio.songs.forEach((s, k) => songSel.append(el("option", { value: k, textContent: s.title })));

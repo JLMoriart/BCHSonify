@@ -13,6 +13,11 @@ radio.json keeps its title, words and times from there (the studio's Radio timin
 it's named after --relyric: then its words are read again from its lyrics file, and lines keep their times
 as long as their text is unchanged (new or changed lines start untimed); its title stays.
 
+What's published isn't the mp3 itself but one made from the song's .wav in songs/ (same name as the mp3, any
+case): constant-bitrate, so the radio can join it part way through exactly (server/make_mp3s.py, which the
+server also runs, so mp3s are never uploaded). Needs lame or ffmpeg. Each song's length (in seconds) is stored
+with it: everyone hears the same point of the same song (radio.js), worked out from the lengths and the time.
+
 The mp3s are kept out of git (web/radio/*.mp3 is ignored); deploy_web.sh copies them to the server.
 
   python3 tools/make_radio.py [--relyric "Song title" ...]
@@ -21,12 +26,16 @@ import argparse
 import json
 import os
 import re
-import shutil
+import sys
+
+from mutagen.mp3 import MP3  # (python3-mutagen) an mp3's exact length
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SONGS = os.path.join(ROOT, "songs")
 OUT = os.path.join(ROOT, "web", "radio")
 LIST = os.path.join(OUT, "radio.json")
+sys.path.insert(0, os.path.join(ROOT, "server"))
+import make_mp3s  # noqa: E402
 
 
 def slug(title):
@@ -42,6 +51,13 @@ def lyric_lines(path):
         if line:
             lines.append(line)
     return lines
+
+
+def wav_for(title):
+    wav = [n for n in os.listdir(SONGS) if n.lower() == title.lower() + ".wav"]
+    if len(wav) != 1:
+        raise SystemExit(f"{title}: no songs/{title}.wav (the published mp3 is made from it)")
+    return os.path.join(SONGS, wav[0])
 
 
 def main():
@@ -63,9 +79,13 @@ def main():
         if len(match) != 1:
             raise SystemExit(f"{mp3}: expected one lyrics file named like '<title> lyrics.txt', found {match or 'none'}")
         file = slug(title) + ".mp3"
-        shutil.copyfile(os.path.join(SONGS, mp3), os.path.join(OUT, file))
+        if make_mp3s.ensure(os.path.join(ROOT, "web"), wav_for(title), file):
+            print(f"{title}: radio/{file} made from its .wav ({make_mp3s.KBPS} kbps)")
         was = old.get(file)
+        seconds = round(MP3(os.path.join(OUT, file)).info.length, 3)
         if was and title.lower() not in relyric and was["title"].lower() not in relyric:
+            was.pop("stream", None)
+            was["seconds"] = seconds
             songs.append(was)  # as edited in the studio
             print(f"{was['title']}: kept as it was ({sum(l['t'] is not None for l in was['lines'])} of {len(was['lines'])} lines timed)")
             continue
@@ -80,7 +100,7 @@ def main():
             if kept.get("end") is not None:
                 line["end"] = kept["end"]
             lines.append(line)
-        songs.append({"title": was["title"] if was else title, "file": file, "lines": lines})
+        songs.append({"title": was["title"] if was else title, "file": file, "seconds": seconds, "lines": lines})
         timed = sum(l["t"] is not None for l in lines)
         print(f"{title}: {len(lines)} lines, {timed} timed -> radio/{file}")
     with open(LIST, "w") as f:
