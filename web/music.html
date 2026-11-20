@@ -15,7 +15,7 @@
 <div class="layout">
   <main>
     <header>
-      <a class="back" href="./">← The ferry line</a>
+      <a class="back" href="./">← Spirits of Bitcoin Visualizer</a>
       <h1>Spirits of Bitcoin <span>Music</span></h1>
       <p class="dim">Stream any song here. Download the mp3s free, or buy the full-quality .wav files with Bitcoin Cash.</p>
     </header>
@@ -25,11 +25,6 @@
     </div>
     <ol id="tracks" class="tracks" aria-label="Tracks"><li class="loading dim">Loading tracks…</li></ol>
     <p id="loadError" class="dim" hidden>The track list couldn't load. Try reloading the page.</p>
-    <section id="owned" class="owned" hidden>
-      <h2>Your purchases</h2>
-      <p class="dim">Kept in this browser. To download them somewhere else, open an order's link there.</p>
-      <ul id="ownedList"></ul>
-    </section>
   </main>
   <aside id="cart" class="cart" aria-labelledby="cartTitle">
     <button id="cartToggle" class="cart-toggle" type="button" aria-expanded="false"><span>Cart</span> <span id="cartCount" class="count">0</span> <span id="cartBarTotal" class="dim"></span></button>
@@ -59,9 +54,6 @@
   <div id="payDone" hidden>
     <p class="paid">Paid. Thank you!</p>
     <ul id="payDownloads" class="downloads"></ul>
-    <p class="dim">Your purchase is saved in this browser. To download it on another device, or after clearing this browser's data, keep this link:</p>
-    <div class="row"><code id="payLink"></code></div>
-    <div class="row"><button id="payCopyLink" type="button">Copy link</button></div>
   </div>
   <p id="payError" class="error" role="alert" hidden></p>
 </dialog>

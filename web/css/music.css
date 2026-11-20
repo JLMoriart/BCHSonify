@@ -47,7 +47,6 @@ a.button { display: inline-block; color: var(--ink) !important; text-decoration:
 a.button:hover { border-color: var(--muted); }
 a.button.primary { border-color: var(--soul); color: var(--soul) !important; }
 .track .incart { border-color: rgba(205,244,255,0.45); color: var(--soul); }
-.track .owned-tag { font-size: 12px; color: #9fe8c0; }
 
 /* ---- the cart: a column on the right */
 .cart { position: sticky; top: 24px; align-self: start; background: rgba(20,27,46,0.85); border: 1px solid var(--rule); border-radius: 12px; padding: 14px 16px 16px; }
@@ -65,12 +64,6 @@ a.button.primary { border-color: var(--soul); color: var(--soul) !important; }
 .count { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 999px; background: var(--soul); color: var(--night); font-size: 12px; font-weight: 700; }
 .count:empty, .count[data-n="0"] { background: var(--rule); color: var(--muted); }
 
-/* ---- what this browser has bought */
-.owned { margin-top: 28px; }
-.owned p { margin: 0 0 8px; font-size: 13px; }
-.owned ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
-.owned li { padding: 10px 12px; border: 1px solid var(--rule); border-radius: 8px; background: rgba(20,27,46,0.6); font-size: 13px; }
-.owned li .links { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 4px; }
 
 /* ---- the payment window */
 dialog.pay { width: min(440px, calc(100% - 24px)); max-height: calc(100dvh - 24px); overflow: auto; box-sizing: border-box; padding: 16px 18px 18px; color: var(--ink);
@@ -89,7 +82,6 @@ dialog.pay::backdrop { background: rgba(5,8,18,0.6); }
 .pay .paid { font-size: 17px; font-weight: 600; color: #9fe8c0; margin: 4px 0 10px; }
 .pay .downloads { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .pay .downloads a { display: block; text-align: center; }
-.pay > p.dim { font-size: 13px; }
 .pay .error { color: #ffb4a8; font-size: 13px; text-align: center; margin: 10px 0 0; }
 
 /* ---- narrow screens: the tracks' buttons under their titles, and the cart a bar along the bottom that opens upward */

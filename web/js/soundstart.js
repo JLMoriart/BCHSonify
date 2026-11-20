@@ -8,10 +8,11 @@ const RADIO_KEY = "bchsonify.radio"; // this browser's choice: "1" radio, else t
 /** Wire `sonifier` to a Mute button (the volume slider goes next to it) and a "click for sound" hint
  *  element. Sound starts on its own when the browser allows it; otherwise on the visitor's first click,
  *  tap or key press. Either way it fades in, once `ready` (the sound settings) has resolved.
- *  radio: a promise of the Radio (or null: none), and radioBtn its button (hidden if there's no radio).
+ *  radio: a promise of the Radio (or null: none), and radioBtn its button (hidden if there's no radio);
+ *  radioLink, if given, shows only while the radio is on (the music page, where its songs download).
  *  Returns ensure(): a promise that sound is running (unless muted or the browser still blocks it), with
  *  ensure.setRadio(on) to switch between the sonification and the radio. */
-export function soundControls(s, muteBtn, hint, ready, radioP = Promise.resolve(null), radioBtn = null) {
+export function soundControls(s, muteBtn, hint, ready, radioP = Promise.resolve(null), radioBtn = null, radioLink = null) {
   let muted = false, radio = null;
   const ctx = s.context();
   volumeControl(s, muteBtn);
@@ -37,10 +38,11 @@ export function soundControls(s, muteBtn, hint, ready, radioP = Promise.resolve(
     if (!r || !radioBtn) return;
     try { r.on = localStorage.getItem(RADIO_KEY) === "1"; } catch { /* no storage: the sonification */ }
     radioBtn.hidden = false;
-    radioBtn.setAttribute("aria-pressed", String(r.on));
+    const showOn = () => { radioBtn.setAttribute("aria-pressed", String(r.on)); if (radioLink) radioLink.hidden = !r.on; };
+    showOn();
     radioBtn.onclick = () => {
       r.on = !r.on;
-      radioBtn.setAttribute("aria-pressed", String(r.on));
+      showOn();
       try { localStorage.setItem(RADIO_KEY, r.on ? "1" : "0"); } catch { /* not remembered */ }
       if (r.on) s.stop(); else r.stop();
       if (!muted) ctx.resume().then(begin);

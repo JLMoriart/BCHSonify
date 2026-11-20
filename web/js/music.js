@@ -4,7 +4,7 @@
 // (the QR code, or "Open in a wallet"), and a key, which only this browser gets, that downloads its .wavs.
 //
 // Kept in this browser (localStorage): the cart, and the orders (paid or waiting), so purchases stay
-// downloadable here. An order's link (music.html#order=<id>.<key>) brings it to another browser.
+// downloadable here.
 
 const $ = (id) => document.getElementById(id);
 const CART_KEY = "bchsonify.cart", ORDERS_KEY = "bchsonify.orders";
@@ -187,7 +187,7 @@ function saveOrders() {
   // unpaid ones are dropped once they can't be paid any more (the shop forgets them too)
   orders = orders.filter((o) => o.status === "paid" || o.status === "partial" || Date.now() - o.created < 4 * 3600e3);
   store.set(ORDERS_KEY, orders);
-  showOwned();
+  showBought();
 }
 async function api(path, opts) {
   let r;
@@ -196,20 +196,9 @@ async function api(path, opts) {
   if (!r.ok) throw Object.assign(new Error(body.error || `The shop isn't available right now (${r.status}).`), { status: r.status });
   return body;
 }
-const orderLink = (o) => `${location.origin}${location.pathname}#order=${o.id}.${o.key}`;
 
-function showOwned() {
-  const paid = orders.filter((o) => o.status === "paid" || o.status === "partial");
-  $("owned").hidden = !paid.length;
-  $("ownedList").replaceChildren(...paid.map((o) => {
-    const links = el("div", { className: "links" });
-    if (o.status === "paid") for (const id of o.tracks) if (byId.has(id)) links.append(el("a", { href: wavUrl(o, id), download: wavName(id), textContent: `${byId.get(id).title}.wav ↓` }));
-    const more = el("a", { href: orderLink(o), textContent: "Order link" });
-    more.onclick = (e) => { e.preventDefault(); openOrder(o); };
-    return el("li", {}, el("div", { textContent: `${o.tracks.length} track${o.tracks.length > 1 ? "s" : ""}, ${fmtSats(o.amount)}${o.status === "partial" ? " (part paid)" : ""} · ` }, more), links);
-  }));
-  if (byId.size) { showActions(); showCart(); }
-}
+// the tracks' buttons and the cart, after an order changes (a track bought shows "Download wav")
+function showBought() { if (byId.size) { showActions(); showCart(); } }
 
 // ---- paying
 const dialog = $("pay");
@@ -218,8 +207,9 @@ dialog.querySelector(".close").onclick = () => dialog.close();
 dialog.addEventListener("close", () => { clearTimeout(poll); shown = null; });
 
 async function checkout(tracks) {
-  // an order already waiting for exactly these tracks is shown again, not made twice
-  const same = orders.find((o) => o.status === "open" && o.tracks.length === tracks.length && o.tracks.every((t) => tracks.includes(t)));
+  // an order already waiting for exactly these tracks (or part paid) is shown again, not made twice: so a
+  // payment window closed before paying in full comes back, with what's still to pay
+  const same = orders.find((o) => (o.status === "open" || o.status === "partial") && o.tracks.length === tracks.length && o.tracks.every((t) => tracks.includes(t)));
   if (same) { openOrder(same); return; }
   showDialog({ tracks, busy: true });
   try {
@@ -270,8 +260,6 @@ async function showOrder(o, v) {
     $("payWait").hidden = true; $("payDone").hidden = false;
     $("payDownloads").replaceChildren(...o.tracks.filter((id) => byId.has(id)).map((id) =>
       el("li", {}, el("a", { className: "button primary", href: wavUrl(o, id), download: wavName(id), textContent: `${byId.get(id).title}.wav ↓  (${(byId.get(id).wavBytes / 1e6).toFixed(0)} MB)` }))));
-    $("payLink").textContent = orderLink(o);
-    $("payCopyLink").onclick = () => copy($("payCopyLink"), orderLink(o), "Copy link");
     return;
   }
   const left = v.amount - v.received;
@@ -304,7 +292,7 @@ async function copy(btn, text, label) {
   setTimeout(() => { btn.textContent = label; }, 1500);
 }
 
-// ---- start: the track list, then any order from a link, and the latest status of orders still waiting
+// ---- start: the track list, then the latest status of orders still waiting
 (async () => {
   try {
     const r = await fetch("music.json"); // (as the page's preload asks for it, so that one download serves both)
@@ -313,15 +301,6 @@ async function copy(btn, text, label) {
   byId = new Map(catalog.tracks.map((t) => [t.id, t]));
   buildTracks();
   showCart();
-  showOwned();
-  const m = /#order=([\w-]+)\.([\w-]+)/.exec(location.hash);
-  if (m) {
-    history.replaceState(null, "", location.pathname + location.search);
-    try {
-      const v = await api(`shop/order/${m[1]}?key=${encodeURIComponent(m[2])}`);
-      openOrder(keepOrder(v, m[2]), v);
-    } catch (e) { showDialog({ tracks: [], busy: false }); for (const b of ["payOpen", "payCopy", "payCopyAmount"]) $(b).hidden = true; showError(e.message); }
-  }
   for (const o of orders.filter((x) => x.status !== "paid")) { // paid while this page was closed?
     api(`shop/order/${o.id}?key=${encodeURIComponent(o.key)}`).then((v) => { o.status = v.status; saveOrders(); }).catch((e) => {
       if (e.status === 404) { orders = orders.filter((x) => x !== o); saveOrders(); }
