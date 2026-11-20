@@ -18,6 +18,10 @@ import { Waves } from "./waves.js";
 import { HoldFade } from "./fade.js";
 
 export const FADE_IN = 2.0; // s, master fade-in whenever audio starts
+export const OUTPUT_DB = 9;  // dB: the sonification's level, as heard at Volume 0 dB (not the radio's)
+// The last thing before the speakers, for everything (the sonification and BCH Radio): a limiter, so nothing
+// odd (a pile-up of notes, a bug, the Volume slider at +6 dB) comes out loud enough to hurt. Normally idle.
+const LIMITER = { threshold: -1.5, knee: 0, ratio: 20, attack: 0.002, release: 0.15 };
 
 export const PARTIAL_KEYS = ["partial2", "partial3", "partial4", "partial5", "partial6"];
 export const PARTIAL_DECAY_KEYS = PARTIAL_KEYS.map((k) => k + "Decay");
@@ -189,7 +193,9 @@ export class Sonifier {
     this.offset = 0;          // server clock - local clock, s
     this.ctx = null;
     this.master = null;
-    this.volume = null;       // master volume (listener setting), after everything else
+    this.volume = null;       // master volume (listener setting), after everything else but the limiter
+    this.boost = null;        // the sonification's own level (OUTPUT_DB), into the volume
+    this.limiter = null;      // after the volume: the safety limiter (LIMITER)
     this.volumeDb = 0;
     this.voices = new Map();  // harmonic -> SineVoice | BlockVoice
     this.playing = false;
@@ -268,7 +274,10 @@ export class Sonifier {
       const AC = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AC({ latencyHint: "playback" }); // bigger buffers: less CPU, latency doesn't matter here
       this.volume = new GainNode(this.ctx, { gain: dbToAmp(this.volumeDb) });
-      this.volume.connect(this.ctx.destination);
+      this.limiter = new DynamicsCompressorNode(this.ctx, LIMITER);
+      this.volume.connect(this.limiter).connect(this.ctx.destination);
+      this.boost = new GainNode(this.ctx, { gain: dbToAmp(OUTPUT_DB) });
+      this.boost.connect(this.volume);
     }
     return this.ctx;
   }
@@ -285,7 +294,7 @@ export class Sonifier {
     this.masterFade.segs = [[t, 0, t + FADE_IN, 1, "lin"]];
     this.master.gain.setValueAtTime(0, t);
     this.master.gain.linearRampToValueAtTime(1, t + FADE_IN);
-    this.master.connect(this.volume);
+    this.master.connect(this.boost);
     this.space = new Space(ctx, this.master, p);
     this.sines = new GainNode(ctx);
     this.sines.connect(this.master);
