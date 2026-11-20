@@ -106,3 +106,37 @@ dialog.about { width: min(580px, calc(100% - 32px)); line-height: 1.55; }
 .about p { margin: 8px 0 0; }
 @media (max-width: 420px) { .corner { gap: 6px; } .corner button { padding: 6px 11px; } .sound { gap: 6px; padding-left: 4px; }
   .sound label.volume, .sound .wide { display: none; } } /* phones: their own volume buttons, and room for Radio */
+/* the visitors' page: the BCH BLAZE 2026 banner along the top (the slides' crimson), the scene filling the rest */
+body.home { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+body.home .scene { flex: 1; height: auto; min-height: 0; }
+.blaze { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 25px;
+  padding: 5px 12px; padding-top: max(5px, env(safe-area-inset-top, 0px)); font-size: 19.5px; line-height: 1.3; color: #ffe3ad;
+  background: linear-gradient(90deg, #2a0a10, #5a1220 50%, #2a0a10); border-bottom: 1px solid rgba(255,120,100,0.35); }
+.blaze strong { letter-spacing: 0.06em; color: #fff3dc; }
+.blaze .links { display: flex; gap: 20px; }
+.blaze a { color: #ffe3ad; text-decoration: underline; text-decoration-color: rgba(255,227,173,0.5); text-underline-offset: 4px; }
+.blaze a:hover { text-decoration-color: #ffe3ad; }
+.blaze .ember { display: flex; align-items: center; gap: 11px; min-width: 0; max-width: 100%; }
+.blaze .label { white-space: nowrap; }
+.blaze code { font: 18px ui-monospace, monospace; color: #fff3dc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; user-select: all; }
+.blaze button { flex: none; padding: 2px 14px; font-size: 17px; border-radius: 999px; background: rgba(20,10,16,0.5); border-color: rgba(255,214,140,0.45); color: #ffe3ad; white-space: nowrap; }
+.blaze button:hover { border-color: #ffd68c; }
+/* phones: smaller */
+@media (max-width: 560px) {
+  .blaze { font-size: 15.5px; gap: 4px 18px; }
+  .blaze .links { gap: 16px; }
+  .blaze .ember { gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .blaze code { font-size: 13.5px; max-width: 100%; }
+  .blaze button { font-size: 13.5px; padding: 1px 11px; }
+}
+/* its QR code window */
+dialog.vote { width: min(360px, calc(100% - 32px)); box-sizing: border-box; padding: 18px 20px 20px; color: var(--ink); text-align: center;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; box-shadow: 0 12px 48px rgba(0,0,0,0.5); }
+dialog.vote::backdrop { background: rgba(5,8,18,0.6); }
+.vote h2 { margin: 0 0 6px; padding: 0 30px; font-size: 18px; color: #ffe3ad; }
+.vote p { margin: 0 0 12px; font-size: 13px; }
+.vote .close { position: absolute; top: 12px; right: 12px; padding: 0 9px; font-size: 18px; line-height: 26px; }
+.vote .qr { width: 240px; height: 240px; margin: 0 auto; background: #fff; border-radius: 8px; padding: 8px; box-sizing: content-box; }
+.vote .qr svg { width: 100%; height: 100%; display: block; }
+.vote code { display: block; margin-top: 12px; font: 12px ui-monospace, monospace; color: var(--muted); overflow-wrap: anywhere; user-select: all; }
+.vote .row { margin-top: 12px; }

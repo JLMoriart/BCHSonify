@@ -25,7 +25,7 @@ SITE=${BCHSONIFY_SITE:?set BCHSONIFY_SITE=the site address, e.g. example.com (en
 REDIRECTS=${BCHSONIFY_REDIRECTS:-}
 for h in $REDIRECTS; do [[ $h =~ ^[a-z0-9.-]+$ ]] || { echo "BCHSONIFY_REDIRECTS: '$h' should be a plain host name"; exit 1; }; done
 
-FILES=(index.html music.html css js vendor donate donate.json sound.json radio music.json) # in web/: what visitors get
+FILES=(index.html music.html slides.pdf css js vendor donate donate.json sound.json radio music.json) # in web/: what visitors get
 WAV=/var/lib/bchsonify-wav
 LIVE=/var/www/bchsonify STAGE=/var/www/bchsonify.stage
 
