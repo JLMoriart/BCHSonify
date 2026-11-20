@@ -5,7 +5,8 @@ The tracks are BCH Radio's songs (web/radio/radio.json, from tools/make_radio.py
 and downloads free as its mp3 (radio/<file>.mp3), and sells as a .wav: the .wav in songs/ (not its
 subfolders) whose name matches the song's title, ignoring case. The .wavs go to shop/wav/<id>.wav, out of git
 and off the public site; deploy_web.sh copies them to the server, where only paid orders can download them.
-Also web/radio/spirits-of-bitcoin-mp3s.zip: every mp3, for "Download all mp3s" (out of git, like the mp3s).
+Also web/radio/spirits-of-bitcoin-mp3s.zip: every mp3, for "Download all mp3s" (server/zip_mp3s.py; out of git,
+and not uploaded: the server builds its own from the mp3s it has).
 
   python3 tools/make_music.py [--price SATS]   (default: the price already in music.json, else 10000)
 """
@@ -14,13 +15,15 @@ import json
 import os
 import shutil
 import struct
-import zipfile
+import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SONGS = os.path.join(ROOT, "songs")
 RADIO = os.path.join(ROOT, "web", "radio", "radio.json")
 OUT = os.path.join(ROOT, "web", "music.json")
 WAV = os.path.join(ROOT, "shop", "wav")
+sys.path.insert(0, os.path.join(ROOT, "server"))
+import zip_mp3s  # noqa: E402
 
 
 def wav_seconds(path):
@@ -66,16 +69,11 @@ def main():
     for n in os.listdir(WAV):  # no longer for sale
         if n[:-4] not in {t["id"] for t in tracks}:
             os.remove(os.path.join(WAV, n))
-    # every mp3 in one download ("Download all mp3s"): stored, not compressed (mp3s barely compress)
-    zip_path = os.path.join(ROOT, "web", "radio", "spirits-of-bitcoin-mp3s.zip")
-    with zipfile.ZipFile(zip_path + ".tmp", "w", zipfile.ZIP_STORED) as z:
-        for k, t in enumerate(tracks, 1):
-            z.write(os.path.join(ROOT, "web", t["mp3"]), f"Spirits of Bitcoin/{k:02d} {t['title']}.mp3")
-    os.replace(zip_path + ".tmp", zip_path)
-    print(f"web/radio/{os.path.basename(zip_path)}: {os.path.getsize(zip_path) / 1e6:.1f} MB")
     with open(OUT, "w") as f:
         json.dump({"price": price, "tracks": tracks}, f, indent=2)
         f.write("\n")
+    zip_path = zip_mp3s.build(os.path.join(ROOT, "web"))  # every mp3 in one download ("Download all mp3s")
+    print(f"web/radio/{os.path.basename(zip_path)}: {os.path.getsize(zip_path) / 1e6:.1f} MB")
     print(f"web/music.json: {len(tracks)} tracks at {price} sats each")
 
 

@@ -9,6 +9,7 @@
      shop in the relay: server/shop.py). The track list is music.json (tools/make_music.py). -->
 <link rel="stylesheet" href="css/scene.css">
 <link rel="stylesheet" href="css/music.css">
+<link rel="preload" href="music.json" as="fetch" crossorigin> <!-- the track list, fetched alongside the script, not after it -->
 </head>
 <body class="music">
 <div class="layout">
@@ -22,7 +23,7 @@
       <div class="offer"><a id="allMp3" class="button" href="radio/spirits-of-bitcoin-mp3s.zip" download="Spirits of Bitcoin (mp3).zip">Download all mp3s</a><span class="note">Lower quality, free</span></div>
       <div class="offer paid"><button id="allWav" class="primary" type="button">Purchase all wavs</button><span id="allWavNote" class="note"></span></div>
     </div>
-    <ol id="tracks" class="tracks" aria-label="Tracks"></ol>
+    <ol id="tracks" class="tracks" aria-label="Tracks"><li class="loading dim">Loading tracks…</li></ol>
     <p id="loadError" class="dim" hidden>The track list couldn't load. Try reloading the page.</p>
     <section id="owned" class="owned" hidden>
       <h2>Your purchases</h2>

@@ -5,6 +5,7 @@
 #   - the firewall opens 80 (certificates, and redirecting http to https) and 443
 #   - the visitors' files from web/ go to /var/www/bchsonify, swapped in all at once. Not the studio
 #     (studio.html and the old addresses that forward to it) or the test pages (web/_*).
+#   - the mp3s' zip ("Download all mp3s") is built on the server from the uploaded mp3s (zip_mp3s.py), not sent
 #   - the music shop's .wav files (shop/wav/, from tools/make_music.py) go to /var/lib/bchsonify-wav, off the
 #     public site: Caddy serves one only when the shop says it's a paid order's (see Caddyfile)
 # Only what changed is uploaded: the server keeps a copy of the site (/var/www/bchsonify.stage) that rsync
@@ -38,7 +39,7 @@ if [ ! -d $STAGE ]; then if [ -d $LIVE ]; then cp -a $LIVE $STAGE; else install 
 install -d -m 755 $WAV"
 
 # 2. the copy made exactly the listed files (what changed is sent; anything else there is removed)
-filters=(--exclude='_*')
+filters=(--exclude='_*' --exclude='/radio/*.zip') # (the zip: built there, below)
 for f in "${FILES[@]}"; do filters+=(--include="/$f" --include="/$f/***"); done
 filters+=(--exclude='*')
 rsync -rlptz --delete --delete-excluded --chmod=D755,F644 "${filters[@]}" --out-format='  sent %n' ../web/ "$VPS:$STAGE/"
@@ -46,9 +47,12 @@ if [ -d ../shop/wav ]; then # the .wavs for sale (uploaded once each, then only 
   rsync -rlpt --delete --chmod=D755,F644 --info=progress2 --out-format='  sent %n' ../shop/wav/ "$VPS:$WAV/"
 fi
 
-# 3. the live site swapped for a hard-linked copy of it, and Caddy's configuration
+# 3. the mp3s' zip built there, the live site swapped for a hard-linked copy of the copy, and Caddy's configuration
+scp -q zip_mp3s.py "$VPS":/tmp/zip_mp3s.py
 sed "s|{SITE}|$SITE|" Caddyfile | ssh "$VPS" "set -e
 cat > /tmp/Caddyfile
+[ ! -f $STAGE/music.json ] || python3 /tmp/zip_mp3s.py $STAGE
+rm -f /tmp/zip_mp3s.py
 rm -rf $LIVE.new && cp -al $STAGE $LIVE.new
 [ -d $LIVE ] && mv $LIVE $LIVE.old
 mv $LIVE.new $LIVE && rm -rf $LIVE.old

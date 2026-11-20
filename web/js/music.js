@@ -307,9 +307,9 @@ async function copy(btn, text, label) {
 // ---- start: the track list, then any order from a link, and the latest status of orders still waiting
 (async () => {
   try {
-    const r = await fetch("music.json", { cache: "no-cache" });
+    const r = await fetch("music.json"); // (as the page's preload asks for it, so that one download serves both)
     catalog = await r.json();
-  } catch { $("loadError").hidden = false; return; }
+  } catch { $("tracks").replaceChildren(); $("loadError").hidden = false; return; }
   byId = new Map(catalog.tracks.map((t) => [t.id, t]));
   buildTracks();
   showCart();

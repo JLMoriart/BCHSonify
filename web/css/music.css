@@ -14,6 +14,7 @@ h2 { font-size: 16px; margin: 0 0 8px; }
 
 /* ---- the tracks */
 .tracks { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.tracks .loading { padding: 18px 14px; border: 1px dashed var(--rule); border-radius: 10px; text-align: center; }
 .track { display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-areas: "play info" "actions actions"; gap: 10px 14px; align-items: center;
   padding: 12px 14px; background: rgba(20,27,46,0.78); border: 1px solid var(--rule); border-radius: 10px; }
 .track.playing { border-color: rgba(205,244,255,0.45); box-shadow: 0 0 22px rgba(205,244,255,0.07); }
