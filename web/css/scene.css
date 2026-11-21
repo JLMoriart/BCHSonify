@@ -117,7 +117,7 @@ body.home .scene { flex: 1; height: auto; min-height: 0; }
 .blaze a { color: #ffe3ad; text-decoration: underline; text-decoration-color: rgba(255,227,173,0.5); text-underline-offset: 4px; }
 .blaze a:hover { text-decoration-color: #ffe3ad; }
 .blaze .ember { display: flex; align-items: center; gap: 11px; min-width: 0; max-width: 100%; }
-.blaze .label { white-space: nowrap; }
+.blaze .label, .blaze .prior { white-space: nowrap; }
 .blaze code { font: 18px ui-monospace, monospace; color: #fff3dc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; user-select: all; }
 .blaze button { flex: none; padding: 2px 14px; font-size: 17px; border-radius: 999px; background: rgba(20,10,16,0.5); border-color: rgba(255,214,140,0.45); color: #ffe3ad; white-space: nowrap; }
 .blaze button:hover { border-color: #ffd68c; }

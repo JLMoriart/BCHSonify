@@ -1008,9 +1008,10 @@ function addMadeUp(fee, delay, sound) { // sound: also play it (not for the crow
   addSoul(fee, delay, tx);
   if (sound) { sonifier.event(tx); celebrate(tx); }
 }
-// a firework for a donation as it arrives (not for ones already waiting when the page starts)
+// a firework for a donation as it arrives (not for ones already waiting when the page starts), hidden or not:
+// a hidden page still moves along (runUnseen), so coming back while it's going shows the rest of it
 function celebrate(tx) {
-  if (tx.donation > 0 && landTop && !document.hidden) fireworks.launch(tx.donation, sky);
+  if (tx.donation > 0 && landTop) fireworks.launch(tx.donation, sky);
 }
 const fireworks = new Fireworks(mulberry(23));
 const sky = { get W() { return W; }, skyline: (x) => landTop[clamp(Math.round((x + 4) / 2), 0, landTop.length - 1)] };
