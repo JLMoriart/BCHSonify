@@ -64,9 +64,9 @@ const STRESS_LIMIT = 32e6, STRESS_BLOCK_EVERY = 60, STRESS_FILL = 1.1;
 const FERRY_STAY = 0.8;            // seconds the ferry stays docked at least, even with nobody to take
 const UNKNOWN_FEE_RATE = 1;        // sats/byte assumed when the relay couldn't get a transaction's fee
 const EXPLORER_TX = "https://bchexplorer.info/tx/"; // + txid: a transaction's page on the block explorer
-// lantern colour by fee: one colour per doubling of sats/byte, 1 red, 2 orange, 4 yellow, 8 green, 16 blue,
-// 32 indigo, 64 violet, 128 purple, 256 and up hot magenta; evenly between them per doubling (hue, degrees)
-const FEE_HUES = [0, 30, 60, 120, 240, 258, 275, 295, 320];
+// lantern colour by fee: hue goes evenly with each doubling of sats/byte, from red (0 degrees) at 1 and below
+// to hot magenta (320) at 512 and above
+const FEE_HUE_TOP = 320, FEE_TOP = 512, FEE_HUE_STEP = 5;
 const TYPICAL_BYTES = 225;         // a transaction this size gets a soul of normal size
 const SIZE_GROWTH = 0.08;          // ...and each doubling of its bytes adds this much (each halving removes it); no limit
 const DOLLY_FROM = 2;              // bags: two or more ride on a dolly; a single one floats behind the soul
@@ -509,10 +509,10 @@ function drawPools(list) {
   ctx.globalCompositeOperation = "source-over"; ctx.globalAlpha = 1;
 }
 
-// Lantern colour for a fee rate (FEE_HUES), in 8 steps per doubling so lanterns share a few colours.
+// Lantern colour for a fee rate, in steps of FEE_HUE_STEP degrees of hue (so lanterns share the glows made for
+// each colour: 65 colours at most).
 function lampColor(rate) {
-  const d = Math.round(8 * clamp(Math.log2(rate), 0, FEE_HUES.length - 1)) / 8, i = Math.min(d | 0, FEE_HUES.length - 2);
-  const h = FEE_HUES[i] + (FEE_HUES[i + 1] - FEE_HUES[i]) * (d - i);
+  const h = FEE_HUE_STEP * Math.round((FEE_HUE_TOP / FEE_HUE_STEP) * clamp(Math.log2(rate) / Math.log2(FEE_TOP), 0, 1));
   const ch = (n) => { const k = (n + h / 30) % 12; return Math.round(255 * (0.6 - 0.4 * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); }; // HSL, full saturation, 60% light
   return [ch(0), ch(8), ch(4)];
 }
@@ -1015,13 +1015,13 @@ function celebrate(tx) {
 const fireworks = new Fireworks(mulberry(23));
 const sky = { get W() { return W; }, skyline: (x) => landTop[clamp(Math.round((x + 4) / 2), 0, landTop.length - 1)] };
 // A stress-test transaction: drawn to show every look a soul can have, often. Fee: a third at the 1 sat/B
-// minimum, a third across 1-10, a third 10-300 (every lantern colour, and past hot magenta). 0.5% donate. Outputs: no bag, one
+// minimum, a third across 1-10, a third 10-1,500 (every lantern colour, and past hot magenta). 0.5% donate. Outputs: no bag, one
 // suitcase, small and tall dollies, 5% up to 2,000 (a stack well off the top of the frame). Inputs: mostly
 // 1-2, some consolidations up to 600 (big souls). Never over the 100 kB standard limit. Amounts log-uniform from
 // dust to 1,000 BCH, so every harmonic sounds. NFT, fungible tokens and OP_RETURN each independently common.
 function stressTx() {
   const r = rnd();
-  const fee = r < 0.33 ? 1 : r < 0.66 ? 1 + 9 * rnd() : 10 * Math.pow(30, rnd());
+  const fee = r < 0.33 ? 1 : r < 0.66 ? 1 + 9 * rnd() : 10 * Math.pow(150, rnd());
   const o = rnd(), nOut = o < 0.3 ? 1 : o < 0.55 ? 2 : o < 0.8 ? 3 + Math.floor(3 * rnd()) : o < 0.95 ? 6 + Math.floor(55 * rnd()) : 61 + Math.floor(1940 * rnd() * rnd());
   const i = rnd(), nIn = i < 0.7 ? 1 + Math.floor(2 * rnd()) : i < 0.95 ? 3 + Math.floor(18 * rnd()) : 21 + Math.floor(580 * rnd());
   const nft = rnd() < 0.15, ft = rnd() < 0.2, memo = rnd() < 0.15;

@@ -2,19 +2,21 @@
 // with their lyrics shown a line at a time in the sky (the visualizer draws lyric()). It plays through the
 // sonification's audio context, so the Volume slider sets its level too.
 //
-// Everyone hears the same thing: the playlist has been playing on repeat, in order, since EPOCH, so the time
-// (the server's, from the relay, when there is one) says which song is on and how far in: where(), the one
-// place that decides what's on when. Turning the radio on (or unmuting) joins it there, and it keeps there:
-// a song ends into the one on then (from its start, if this listener is only a little behind), and a stall
-// that leaves it well behind (DRIFT) is caught up. Needs every song's length ("seconds"); the studio's
-// timing tool turns this off (synced = false), to play any song from anywhere.
+// Everyone hears the same thing: the playlist has been playing on repeat, in order, with GAP s of silence
+// after each song, since EPOCH, so the time (the server's, from the relay, when there is one) says which song
+// is on and how far in: where(), the one place that decides what's on when. Turning the radio on (or
+// unmuting) joins it there. After that each song ends into GAP s of silence and the next from its start, so
+// a listener a little behind (a slow connection's stall) stays that little behind; one more than DRIFT s
+// from everyone (lag(), measured in time, across songs) jumps back to where everyone is. Needs every song's
+// length ("seconds"); the studio's timing tool turns this off (synced = false), to play any song from anywhere.
 
 const FADE = 0.6;                    // s: the music fading in (once it's playing) and out (turned off)
 const LINE_IN = 0.35, LINE_OUT = 0.6; // s: a lyric line fading in as it's sung, and out at its end
 const LINE_MAX = 7;                  // s: a line stays up at most this long, if nothing ends it sooner
 const TITLE_AT = 0.8, TITLE_FOR = 5; // s: the song's title shows this far in, this long (before the first line)
 const EPOCH = Date.UTC(2026, 10, 1) / 1000; // s: when the radio's playlist started (on repeat ever since)
-const DRIFT = 5;                     // s: further than this from where everyone is, and it jumps back there
+const GAP = 1;                       // s: silence between songs
+const DRIFT = 15;                    // s: further than this from where everyone is, and it jumps back there
 const CHECK = 5;                     // s: how often, while playing, it checks
 const AHEAD = 20;                    // s: this long before a song ends, the next one starts loading (synced)
 
@@ -54,6 +56,8 @@ export class Radio {
     this.load();
   }
   get song() { return this.songs[this.at]; }
+  // on and making sound (or in the moment of silence between songs)
+  get sounding() { return this.live && (!this.audio.paused || performance.now() < (this.silentUntil || 0)); }
   get spare() { return this.players.find((a) => a !== this.audio); }
   // the song after this one: (synced) the one on when this one ends
   following() {
@@ -72,20 +76,29 @@ export class Radio {
         s.src = `radio/${this.songs[n].file}`; s.preload = "auto"; s.load();
       }
     }
-    if (!this.synced || this.joining || a.seeking) return;
+    if (!this.synced || this.joining || a.seeking || a.paused) return;
     const now = performance.now() / 1000;
     if (now - this.checked < CHECK) return;
     this.checked = now;
-    const w = this.where();
-    if (w.k !== this.at || Math.abs(a.currentTime - w.t) > DRIFT) this.join();
+    if (Math.abs(this.lag()) > DRIFT) this.join();
   }
-  // a song ended: the one on now, from its start if this listener is only a little behind (or the clock is
-  // still in the moment the song ended: lengths are to a few ms), else from where everyone is
+  // a song ended: GAP s of silence, then the next from its start (or, more than DRIFT s from everyone, a
+  // jump back to where everyone is)
   next() {
-    if (!this.synced) { this.cue((this.at + 1) % this.songs.length); return this.play(); }
-    const w = this.where();
-    if (w.k === this.at) return this.join({ k: (this.at + 1) % this.songs.length, t: 0 });
-    return this.join(w.t < DRIFT ? { k: w.k, t: 0 } : w);
+    if (this.synced && Math.abs(this.lag()) > DRIFT) return this.join();
+    this.cue((this.at + 1) % this.songs.length);
+    const a = this.audio;
+    if (a.readyState >= 1 && a.currentTime > 0.25) a.currentTime = 0;
+    return this.after(GAP);
+  }
+  // play this.audio s seconds from now (unless the radio's turned off, or another song cued, meanwhile)
+  after(s) {
+    const a = this.audio;
+    clearTimeout(this.starting);
+    this.silentUntil = performance.now() + s * 1000;
+    return new Promise((done) => {
+      this.starting = setTimeout(() => done(this.live && this.audio === a ? this.play() : undefined), s * 1000);
+    });
   }
   // make song k the one on: the other player, if that's where it's been loading, else loaded here
   cue(k) {
@@ -98,21 +111,37 @@ export class Radio {
     old.pause();
     if (this.onsong) this.onsong(k);
   }
-  // where everyone is now: song k, t s in
+  // the playlist's timeline: one round of it (each song and the silence after it), where song k starts in
+  // it, and where everyone is in it now
+  cycle() { return this.songs.reduce((s, x) => s + x.seconds + GAP, 0); }
+  startOf(k) { let s = 0; for (let i = 0; i < k; i++) s += this.songs[i].seconds + GAP; return s; }
+  pos(now = this.clock()) { const T = this.cycle(); return (((now - EPOCH) % T) + T) % T; }
+  // where everyone is now: song k, t s in (t < 0: in the silence before it, which ends in -t s)
   where(now = this.clock()) {
-    const total = this.songs.reduce((s, x) => s + x.seconds, 0);
-    let t = (((now - EPOCH) % total) + total) % total, k = 0;
-    while (k < this.songs.length - 1 && t >= this.songs[k].seconds) t -= this.songs[k++].seconds;
-    return { k, t };
+    let t = this.pos(now);
+    for (let k = 0; k < this.songs.length; k++) {
+      const s = this.songs[k].seconds;
+      if (t < s) return { k, t };
+      if (t < s + GAP) return { k: (k + 1) % this.songs.length, t: t - s - GAP };
+      t -= s + GAP;
+    }
+    return { k: 0, t: 0 };
+  }
+  // how far this listener is behind everyone, in s (ahead: negative), across songs
+  lag() {
+    const T = this.cycle(), d = this.pos() - (this.startOf(this.at) + this.audio.currentTime);
+    return (((d % T) + T + T / 2) % T) - T / 2;
   }
   // go to where everyone is, and play from there (once the song's loaded enough to jump into)
   join(w = this.where()) {
     this.cue(w.k);
     const a = this.audio;
+    clearTimeout(this.starting);
     if (a.readyState >= 1) { // (not a jump of a moment: a song just begun, already there, plays straight on)
       this.joining = null;
-      if (Math.abs(a.currentTime - w.t) > 0.25) a.currentTime = w.t;
-      return this.play();
+      const t = Math.max(0, w.t);
+      if (Math.abs(a.currentTime - t) > 0.25) a.currentTime = t;
+      return w.t < 0 ? this.after(-w.t) : this.play(); // (in the silence between songs: the next when it ends)
     }
     const token = (this.joining = {});
     return new Promise((done) => {
@@ -149,6 +178,7 @@ export class Radio {
   }
   stop() {
     this.live = false;
+    clearTimeout(this.starting);
     this.fadeTo(0, FADE / 3);
     clearTimeout(this.pausing);
     this.pausing = setTimeout(() => this.audio.pause(), (FADE / 3) * 1000 + 50);

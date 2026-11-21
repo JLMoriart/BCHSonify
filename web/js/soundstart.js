@@ -15,7 +15,7 @@ export function soundControls(s, muteBtn, hint, ready, radioP = Promise.resolve(
   let muted = false, radio = null;
   const ctx = s.context();
   volumeControl(s, muteBtn);
-  const playing = () => (radio && radio.on ? !radio.audio.paused : s.playing);
+  const playing = () => (radio && radio.on ? radio.sounding : s.playing);
   const begin = () => Promise.all([ready, radioP]).then(async () => {
     if (muted || ctx.state !== "running") return;
     if (radio && radio.on) { if (!radio.live) await radio.start(); }
