@@ -504,13 +504,15 @@ function poolSprite(lamp) {
   }
   return c;
 }
-// fade: how much of each soul's pool (a soul forming as it arrives: as much as of its lantern, see fillCooled)
-function drawPools(list, fade = null) {
+// forming: the pools of the souls in list that are arriving (fading in as their souls form, see fillCooled), else
+// of the rest
+function drawPools(list, forming = false) {
   ctx.globalCompositeOperation = "lighter";
   for (const s of list) {
+    if ((s.st === 1) !== forming || (forming && !(s.f > 0))) continue;
     standAt(s);
     const x = gx + 0.4, e = ground(gz), D = depth(gz, e), w = (f * POOL_R) / D;
-    const a = smooth(((0.9 * f) / D - 6) / (POOL_FULL - 6)) * (fade ? fade(s) : 1);
+    const a = smooth(((0.9 * f) / D - 6) / (POOL_FULL - 6)) * (forming ? fillCooled(s.f * FORM) : 1);
     if (a < 0.02) continue;
     const y1 = Y(gz - POOL_R, e), y2 = Y(gz + POOL_R, e);
     ctx.globalAlpha = POOL_ALPHA * a;
@@ -943,7 +945,7 @@ function prepareImages(t) {
   for (const s of flyers) if (s.u >= 0 && s.u < 0.35 && 0.9 * ppm(s.oz, s.oe) >= FAR_S) liftOffPicture(s, 0.9 * ppm(s.oz, s.oe), true);
   redraws = 0;
   for (const s of mids) {
-    if (s.tr.donation) continue;
+    if (s.tr.donation || s.st === 1) continue; // (one arriving: drawn live as it forms)
     standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
     if (sS * s.tr.scale >= 16) soulImages(s, sS, true);
   }
@@ -1562,10 +1564,10 @@ function arrivalHead(hx, hy, S0, k, fs, col) {
 // from FAR_SWIRL_FROM inputs, fading in to full by 3 more, so there's no pop where it starts.
 const FAR_SWIRL_FROM = 5;
 const FAR_SWIRL_COLS = Array.from({ length: 9 }, (_, n) => Array.from({ length: n }, (_, i) => `rgb(${hueRGB((360 * i) / n).map(Math.round)})`)); // [count][i]
-function drawFarSwirls() {
+function drawFarSwirls(list) {
   const N = 6;
   ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "butt";
-  for (const s of arrivals) {
+  for (const s of list) {
     const ins = s.tx.inputs, n = ins ? ins.length : 0;
     if (s.vortex || n < FAR_SWIRL_FROM || s.u < 0 || s.u >= VORTEX_MEET) continue;
     const k = ease01((n - FAR_SWIRL_FROM) / 3);
@@ -1616,10 +1618,10 @@ function starGlow(key) {
   }
   return c;
 }
-function drawVortexes() {
+function drawVortexes(list) {
   const col = "190,240,255";
   ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "butt"; // (flat ends: the steps of a trail meet without overlapping, so no bright beads where they join)
-  for (const s of arrivals) {
+  for (const s of list) {
     if (!s.vortex || s.u < 0) continue;
     arrivalPos(s, s.u); project(wx, wz, we);
     const up = LAND_MID * sS; // aimed at the body's middle, lifted just as the soul's own light is (see streaks)
@@ -2080,7 +2082,24 @@ function drawLyric() {
   ctx.restore();
 }
 
-const formingMid = [], formingNear = [], formingPool = (s) => fillCooled(s.f * FORM); // as the soul itself fades in
+// Arriving souls are drawn in their places in the line, back to front with the rest (so the souls, stacks and
+// pier in front of where one lands are in front of its light, and the boat in front of all of them): each run of
+// them between two standing souls together, with their lights. farArrivals: those landing far off (or over the
+// horizon), before the middle distance.
+const farArrivals = [], arrivalRun = [];
+function drawArrivals(list, t) {
+  ctx.save();
+  drawVortexes(list); drawFarSwirls(list); streaks(list, arrivalPos, 0.08, "190,240,255", arrivalWisp, t, true);
+  ctx.restore();
+}
+function inOrder(list, one, t) { // list's souls, back to front; one(s, t) draws a standing soul
+  for (let i = 0; i < list.length; ) {
+    if (list[i].st !== 1) { one(list[i++], t); continue; }
+    arrivalRun.length = 0;
+    while (i < list.length && list[i].st === 1) arrivalRun.push(list[i++]);
+    drawArrivals(arrivalRun, t);
+  }
+}
 function draw() {
   const t = reduce ? 20 : now;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -2091,39 +2110,39 @@ function draw() {
   drawSurf(t);
   if (block) { ctx.globalAlpha = ferryAlpha(now); drawFerryWater(t); ctx.globalAlpha = 1; }
   const n = Math.min(line.length, cap); // anyone past the last place is over the horizon
-  mids.length = nears.length = 0;
+  mids.length = nears.length = farArrivals.length = 0;
+  for (const s of arrivals) s.placed = false;
   for (let i = n - 1; i >= 0; i--) {
     const s = line[i];
-    if (s.st === 1 || s.st >= 3) continue;
+    if (s.st >= 3) continue;
     standAt(s);
     if (gz >= farZ) continue;
     (gz >= PIER_END + 0.3 ? mids : nears).push(s);
+    s.placed = true; // (an arriving one: drawn there)
   }
-  formingMid.length = formingNear.length = 0; // souls forming as they arrive: their pools, fading in (see formingPool)
-  for (const s of arrivals) if (s.f > 0) { standAt(s); if (gz < farZ) (gz >= PIER_END + 0.3 ? formingMid : formingNear).push(s); }
+  for (const s of arrivals) if (!s.placed) farArrivals.push(s);
   // the middle distance's pools: hundreds of glows, so painted into their own layer only when souls have moved
   // (whenever the far souls are), and that added on; adding light is adding light, so it's the same picture
   if (farDirty) { const main = ctx; ctx = poolCtx; ctx.clearRect(0, 0, W, H); drawPools(mids); ctx = main; }
   ctx.globalCompositeOperation = "lighter"; ctx.drawImage(poolCv, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
-  if (formingMid.length) drawPools(formingMid, formingPool); // (onto the scene, not the layer: they change every frame)
+  drawPools(mids, true); // arriving souls' pools: onto the scene, not the layer, as they change every frame
   if (farDirty) { drawFar(n); farDirty = !!block; } // called souls pulse, so keep redrawing during a block
   ctx.drawImage(farCv, 0, 0, W, H); // far souls: painted, like the nearer ones
+  if (farArrivals.length) drawArrivals(farArrivals, t);
   const soul = (s) => {
     standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
     drawSoul(sx, sy, sS, s, t, s.st === 2);
   };
   prepareImages(t);
-  for (const s of mids) midSoul(s, t);
+  inOrder(mids, midSoul, t);
   if (frameNo % 60 === 0) sweepImages();
   if (liftOffs.size) sweepLiftOffs();
   if (leavers.length) drawLeavers(t, false);
   ctx.drawImage(pier, 0, 0, W, H);
-  drawPools(nears);
-  if (formingNear.length) drawPools(formingNear, formingPool);
-  nears.forEach(soul);
+  drawPools(nears); drawPools(nears, true);
+  inOrder(nears, soul, t);
   if (leavers.length) drawLeavers(t, true);
   if (block) drawGhostFerry(t);
-  if (arrivals.length) { drawVortexes(); drawFarSwirls(); streaks(arrivals, arrivalPos, 0.08, "190,240,255", arrivalWisp, t, true); }
   if (flyers.length) streaks(flyers, flightPos, 0.05, "255,214,140", flightWisp, t);
   if (block && block.tally && !block.test) { ctx.globalAlpha = ferryAlpha(now); drawTally(); ctx.globalAlpha = 1; } // a test boat has nobody to count
   if (picked) showPicked(t);
