@@ -104,6 +104,18 @@ dialog.about { width: min(580px, calc(100% - 32px)); line-height: 1.55; }
 .about h2 { padding-right: 36px; }
 .about h3 { margin: 18px 0 4px; font-size: 15px; color: var(--soul); }
 .about p { margin: 8px 0 0; }
+/* its pictures (drawn by visualizer.js) */
+.about .fig { margin: 10px 0 4px; }
+.about .fig canvas { display: block; width: 100%; height: 120px; border-radius: 8px; background: var(--night); }
+.about .fig canvas.tall { height: 150px; }
+.about .fig canvas.taller { height: 180px; }
+.about .fig.row { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 8px; }
+.about .fig .cap, .about figcaption { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); text-align: center; }
+.about .fees canvas { height: 18px; border-radius: 4px; }
+.about .ticks { position: relative; height: 16px; margin-top: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.about .ticks span { position: absolute; transform: translateX(-50%); }
+.about .ticks span:first-child { transform: none; }
+.about .ticks span:last-child { transform: translateX(-100%); }
 @media (max-width: 420px) { .corner { gap: 6px; } .corner button { padding: 6px 11px; } .sound { gap: 6px; padding-left: 4px; }
   .sound label.volume, .sound .wide { display: none; } } /* phones: their own volume buttons, and room for Radio */
 /* the visitors' page: the BCH BLAZE 2026 banner along the top (the slides' crimson), the scene filling the rest */

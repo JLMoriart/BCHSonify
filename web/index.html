@@ -24,7 +24,30 @@
   <button class="close" type="button" aria-label="Close">×</button>
   <p>Spirits of Bitcoin is a BitcoinCash (BCH) transaction visualizer and sonifier.</p>
   <h3>The visuals</h3>
-  <p>Each transaction is represented by a spirit. They line up in order of their fee rate (in satoshis per byte), which is visually represented by the color of their lantern. Spirits have one piece of luggage for each output after the first. They have a certificate if they contain CashTokens NFTs, and they hold a coin if they contain fungible CashTokens. They have a scroll if there’s an OP_RETURN output. Larger transactions (in bytes, not amount sent) are represented by larger spirits. Donation transactions have a sparkler instead of a lantern.</p>
+  <p>Each transaction is represented by a spirit.</p>
+  <figure class="fig"><canvas data-fig="spirit" class="tall" aria-label="A spirit: a pale wisp holding a lantern"></canvas></figure>
+  <p>They line up in order of their fee rate (in satoshis per byte), which is visually represented by the color of their lantern.</p>
+  <figure class="fig fees">
+    <canvas data-fig="fees" aria-label="Lantern color by fee rate: red at 1 sat/byte or less, through orange, yellow, green, cyan, blue and purple, to hot magenta at 512 or more"></canvas>
+    <div class="ticks" aria-hidden="true"><span style="left:0%">1</span><span style="left:22.22%">4</span><span style="left:44.44%">16</span><span style="left:66.67%">64</span><span style="left:100%">512</span></div>
+    <figcaption>Lantern color by fee rate, in sat/byte</figcaption>
+  </figure>
+  <p>Spirits have one piece of luggage for each output after the first.</p>
+  <figure class="fig row" style="--n:3">
+    <div><canvas data-fig="bags" aria-label="A spirit with one suitcase"></canvas><span class="cap">2 outputs</span></div>
+    <div><canvas data-fig="dolly" aria-label="A spirit with two suitcases on a dolly"></canvas><span class="cap">3 outputs</span></div>
+    <div><canvas data-fig="stack" aria-label="A spirit with a stack of suitcases on a dolly, rising out of view"></canvas><span class="cap">41 outputs</span></div>
+  </figure>
+  <p>Each input is represented by a glowing light from the sky during the spirit’s arrival.</p>
+  <figure class="fig row" style="--n:4">
+    <div><canvas data-fig="inputs" data-n="1" class="tall" aria-label="One light falling"></canvas><span class="cap">1 input</span></div>
+    <div><canvas data-fig="inputs" data-n="3" class="tall" aria-label="Three lights spiralling down together"></canvas><span class="cap">3 inputs</span></div>
+    <div><canvas data-fig="inputs" data-n="10" class="tall" aria-label="Ten lights spiralling down together"></canvas><span class="cap">10 inputs</span></div>
+    <div><canvas data-fig="inputs" data-n="50" class="tall" aria-label="A swarm of lights spiralling down together"></canvas><span class="cap">50 inputs</span></div>
+  </figure>
+  <p>They have a certificate if they contain CashTokens NFTs, and they hold a coin if they contain fungible CashTokens.</p>
+  <figure class="fig"><canvas data-fig="tokens" class="taller" aria-label="Two spirits: one with a certificate floating beside its head, one holding a gold coin"></canvas></figure>
+  <p>They have a scroll if there’s an OP_RETURN output. Larger transactions (in bytes, not amount sent) are represented by larger spirits. Donation transactions have a sparkler instead of a lantern.</p>
   <p>Mined blocks are represented by the arrival of a boat which takes spirits to the blockchain, where they will have eternal life.</p>
   <h3>The audio</h3>
   <p>All pitches are harmonics of a 30Hz fundamental. Each of a transaction’s outputs sounds its own chime. The frequency of the lowest partial of the chime is determined by the output’s size (in BCH moved). In a logarithmic arrangement, larger amounts result in lower harmonics, down from the thirty first harmonic (dust transactions) to the second harmonic (2,100+ BCH). Then, the pitches of the chime’s other partials are chosen as the pitches in the harmonics of 30Hz that most closely approximate the overtone frequency ratios of an ideal metal bar.</p>

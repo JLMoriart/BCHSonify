@@ -45,7 +45,14 @@ const LAMP_ON_BODY = 0.175, LAMP_ON_SMALL = 0.1, LAMP_REACH = 0.55; // ...and ho
 const SOUL_BODY = [212, 245, 255]; // a small soul's colour before its lantern's light
 const FAR_S = 4.5;                 // souls drawn smaller than this many px are single points
 const LEAVE_FOR = 1.8, LEAVE_RISE = 1.4; // a soul that left the mempool unmined rises this many metres as it fades out over this many seconds
-const FALL = 1.1, CATCHUP = 4;     // seconds for a new soul to drop in; how fast the line closes up (1/s)
+const FALL = 2.0, CATCHUP = 4;     // seconds for a new soul to drop in (as long as a vortex's, VORTEX_FALL: they all fall alike); how fast the line closes up (1/s)
+// A soul with two or more inputs drops in as one shooting star per input, swirling around the line of its fall by
+// gravity (see vortexGravity): the biggest input on that line, the smaller an input, the farther out it starts
+// (amounts compared within the transaction). They all meet the centre by VORTEX_MEET of the fall, and the rest
+// of the way it comes down as one, like any soul. Only for souls drawn at least VORTEX_MIN_S px tall (far off, it wouldn't
+// show), with at most VORTEX_STARS stars (the biggest inputs).
+const VORTEX_FALL = 2.0, VORTEX_MEET = 0.57, VORTEX_TRAIL = 0.16; // s; of the fall; of the fall
+const VORTEX_STARS = 48, VORTEX_MIN_S = 10, VORTEX_R = 0.4, VORTEX_CLEAR = 0.22; // stars at most; px; metres: the orbit's scale; metres: the small ones' clearance
 // The ferry glides in from the right, stops across the water in front of the pier, and carries on to the left.
 const FERRY_X = 0, FERRY_Z = 7.2;   // where it stops (its middle, metres): its near side just above the bottom of the frame, the end of the pier hidden under it
 // The ferry is a ghost: it appears at the pier, still, fading in over FERRY_FADE s with a shimmer; takes its
@@ -76,6 +83,7 @@ const shotFw = /fw=([\d,]+)/.exec(location.hash); // test: fireworks for these d
 const shotFwAgo = +(/fwago=([\d.]+)/.exec(location.hash) || [0, 2.3])[1];
 const shotLyric = /lyric=([^&]+)/.exec(location.hash); // test: this line of lyrics in the sky (#shot=…&lyric=Some%20words)
 const shotDonors = /donors/.test(location.hash);   // test: every made-up soul is a donor (sparklers everywhere)
+const shotWild = /wild(?:=(\w+))?/.exec(location.hash); // test: every made-up soul has strange inputs (#wild, or #wild=many|whale|any)
 const shotBoat = /boat=([\d.]+)/.exec(location.hash), shotFull = +(/full=([\d.]+)/.exec(location.hash) || [0, 0])[1]; // test: a test boat then, for a block this full
 const shotPick = /pick=(\d+)/.exec(location.hash); // test: open the details of the soul at this place in line (at once in a #shot, else after 1.5 s)
 const shot = /shot=([\d.]+)/.exec(location.hash), shotAdd = /add=([\d.]+)/.exec(location.hash), shotDrop = /drop=([\d.]+)/.exec(location.hash);
@@ -575,10 +583,11 @@ function drawDolly(n, id, ground, topY, px) {
 }
 
 // A certificate of authenticity floating by the soul's head: parchment, gold border, seal and ribbons.
+const CERT_SCALE = 1.25; // (it was drawn at 1: the sizes below)
 function drawCertificate(id, t) {
   const w = 0.42, h = 0.3;
   ctx.save();
-  ctx.translate(-0.5, -1.14 + Math.sin(t * 1.3 + id) * 0.015); ctx.rotate(-0.12);
+  ctx.translate(-0.5, -1.14 + Math.sin(t * 1.3 + id) * 0.015); ctx.rotate(-0.12); ctx.scale(CERT_SCALE, CERT_SCALE);
   ctx.fillStyle = "rgba(255,244,210,0.22)"; ctx.fillRect(-w / 2 - 0.03, -h / 2 - 0.03, w + 0.06, h + 0.06); // faint glow
   ctx.fillStyle = "#f7efd8"; ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.strokeStyle = "#b8892e"; ctx.lineWidth = 0.02; ctx.strokeRect(-w / 2 + 0.014, -h / 2 + 0.014, w - 0.028, h - 0.028);
@@ -593,13 +602,33 @@ function drawCertificate(id, t) {
   ctx.fillStyle = "#3b2f20"; ctx.fillRect(-0.1, -0.085, 0.2, 0.024);                      // heading
   ctx.fillStyle = "#9a8c72";
   ctx.fillRect(-0.13, -0.035, 0.26, 0.01); ctx.fillRect(-0.13, -0.005, 0.26, 0.01); ctx.fillRect(-0.13, 0.025, 0.14, 0.01); // lines of text
-  ctx.fillStyle = "#a3283a";                                                              // ribbons, then the seal
+  ctx.fillStyle = "#078a66";                                                              // ribbons, then the seal: Bitcoin Cash green
   ctx.beginPath(); ctx.moveTo(0.085, 0.06); ctx.lineTo(0.07, 0.135); ctx.lineTo(0.095, 0.115); ctx.lineTo(0.11, 0.135); ctx.lineTo(0.135, 0.06); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#c93a50"; ctx.beginPath();
+  ctx.fillStyle = "#0ac18e"; ctx.beginPath();
   for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2, r = k % 2 ? 0.038 : 0.047; ctx.lineTo(0.11 + r * Math.cos(a), 0.055 + r * Math.sin(a)); }
   ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "#f0cd84"; ctx.lineWidth = 0.008; ctx.beginPath(); ctx.arc(0.11, 0.055, 0.022, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = "#e9fff7"; ctx.lineWidth = 0.006; ctx.beginPath(); ctx.arc(0.11, 0.055, 0.022, 0, Math.PI * 2); ctx.stroke();
   ctx.restore();
+}
+
+// A token coin (fungible CashTokens) held in the left hand, at (x, y) in the hand's coordinates: Bitcoin Cash green, its rim
+// reeded (ridged all the way round: notched at the edge, and each ridge lit on one side and shaded on the other).
+const COIN_R = 0.15, COIN_RIDGES = 28;
+function drawCoin(x, y) {
+  const R = COIN_R, n = COIN_RIDGES, Ri = R - 0.022, face = R - 0.034;
+  ctx.fillStyle = "#08a578"; ctx.strokeStyle = "#03503a"; ctx.lineWidth = 0.007; ctx.beginPath(); // the notched edge
+  for (let k = 0; k < 2 * n; k++) { const a = (k / (2 * n)) * Math.PI * 2, r = k % 2 ? Ri : R; ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a)); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  for (let k = 0; k < n; k++) { // each ridge: lit half, shaded half
+    const a0 = (k / n) * Math.PI * 2, a1 = a0 + Math.PI / n, a2 = a0 + (2 * Math.PI) / n;
+    for (const [from, to, c] of [[a0, a1, "#7ff2cd"], [a1, a2, "#056f51"]]) {
+      ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x, y, Ri, from, to); ctx.arc(x, y, face, to, from, true); ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.fillStyle = "#0ac18e"; ctx.strokeStyle = "#04664a"; ctx.lineWidth = 0.01; // the face
+  ctx.beginPath(); ctx.arc(x, y, face, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = "#078a66"; ctx.lineWidth = 0.008; ctx.beginPath(); ctx.arc(x, y, face * 0.68, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = "rgba(230,255,246,0.65)"; ctx.lineWidth = 0.012; ctx.beginPath(); ctx.arc(x, y, face * 0.84, 3.6, 4.9); ctx.stroke(); // a glint
 }
 
 // A sparkler held in the right hand (drawn in the hand's coordinates, soul heights): a wire, burnt black toward
@@ -807,11 +836,7 @@ function drawSoul(x, y, S, s, t, called, part = PART_ALL) {
   }
   // coin in the left hand, scroll under the left arm
   if (tr.ft || tr.memo) carried(lx, ly);
-  if (tr.ft) {
-    ctx.fillStyle = "#d9b25e"; ctx.strokeStyle = "#8a6420"; ctx.lineWidth = 0.012;
-    ctx.beginPath(); ctx.arc(-0.39, -0.53, 0.075, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(-0.39, -0.53, 0.045, 0, Math.PI * 2); ctx.stroke();
-  }
+  if (tr.ft) drawCoin(-0.42, -0.53);
   if (tr.memo) {
     ctx.fillStyle = "#efe0bf"; ctx.strokeStyle = "#8b7350"; ctx.lineWidth = 0.01;
     ctx.fillRect(-0.52, -0.38, 0.17, 0.08); ctx.strokeRect(-0.52, -0.38, 0.17, 0.08);
@@ -986,8 +1011,8 @@ function randomFee() { // sats per byte: most pay the 1 sat/B minimum
 }
 // A made-up transaction, shaped like the relay's: 1/2/3/5 outputs weighted 2:8:2:0.5 (like the workbench's
 // synthetic feed) plus, 1.5% of the time, 8 to 60 outputs; 1 to 6 inputs, mostly few; amounts log-normal around
-// 0.05 BCH (sigma 2.2); 5% hold an NFT, 9% tokens, 7% an OP_RETURN.
-function madeUpTx() {
+// 0.05 BCH (sigma 2.2); 5% hold an NFT, 9% tokens, 7% an OP_RETURN. rate: its fee, sats/byte.
+function madeUpTx(rate) {
   const r = rnd() * 12.5, nOut = rnd() < 0.015 ? 8 + Math.floor(rnd() * 53) : r < 2 ? 1 : r < 10 ? 2 : r < 12 ? 3 : 5, outputs = [];
   const nIn = 1 + Math.floor(6 * rnd() * rnd());
   for (let i = 0; i < nOut; i++) {
@@ -996,7 +1021,47 @@ function madeUpTx() {
   }
   const tx = { type: "tx", t: sonifier.serverNow(), txid: `synthetic-${nextId}`, outputs, size: 10 + 148 * nIn + 34 * nOut, nft: rnd() < 0.05, ft: rnd() < 0.09, memo: rnd() < 0.07 };
   if (rnd() < 0.01 || shotDonors) madeUpDonation(tx); // ~one every 25 s
+  tx.fee = Math.round(rate * tx.size);
+  if (shotWild || rnd() < 0.15) wildInputs(tx, rate); // ~1 in 7: something to test the input vortex with
+  else tx.inputs = madeUpInputs(nIn, tx);
   return tx;
+}
+// a made-up transaction's inputs made strange, and its outputs made to match (inputs = outputs + fee):
+// a consolidation of 20 to 200 small coins, a whale and a few crumbs of dust, or 2 to 60 coins of anything
+// from dust to 100 BCH
+function wildInputs(tx, rate) {
+  const logU = (lo, hi) => Math.round(Math.exp(Math.log(lo) + rnd() * (Math.log(hi) - Math.log(lo))));
+  const kind = { many: 0.5, whale: 1.5, any: 2.5 }[shotWild && shotWild[1]] ?? rnd() * 3, ins = [];
+  if (kind < 1) {
+    const n = logU(20, 200);
+    for (let i = 0; i < n; i++) ins.push(logU(546, 2e6));
+  } else if (kind < 2) {
+    ins.push(logU(1e9, 1e10));
+    for (let i = 0, n = 1 + Math.floor(rnd() * 8); i < n; i++) ins.push(logU(546, 5000));
+  } else {
+    const n = logU(2, 60);
+    for (let i = 0; i < n; i++) ins.push(logU(546, 1e10));
+  }
+  for (let i = ins.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [ins[i], ins[j]] = [ins[j], ins[i]]; }
+  const nOut = tx.outputs.length;
+  tx.size = 10 + 148 * ins.length + 34 * nOut;
+  tx.fee = Math.round(rate * tx.size);
+  const total = ins.reduce((a, v) => a + v, 0), need = tx.fee + 546 * nOut + (tx.donation || 0);
+  if (total < need) ins[0] += need - total; // enough to pay for it
+  const spend = ins.reduce((a, v) => a + v, 0) - tx.fee - (tx.donation || 0), w = tx.outputs.map(() => -Math.log(1 - rnd()));
+  const plain = tx.outputs.length - (tx.donation ? 1 : 0), sw = w.slice(0, plain).reduce((a, v) => a + v, 0);
+  for (let i = 0; i < plain; i++) tx.outputs[i] = 546 + Math.floor(((spend - 546 * plain) * w[i]) / sw);
+  tx.outputs[plain - 1] += spend - tx.outputs.slice(0, plain).reduce((a, v) => a + v, 0);
+  tx.inputs = ins;
+}
+// what a made-up transaction's n inputs spend: its outputs and fee between them, at random, each at least
+// 546 sats (fewer inputs if there isn't enough for that)
+function madeUpInputs(n, tx) {
+  const total = tx.outputs.reduce((a, v) => a + v, 0) + tx.fee, k = Math.max(1, Math.min(n, Math.floor(total / 546)));
+  const w = Array.from({ length: k }, () => -Math.log(1 - rnd())), sum = w.reduce((a, v) => a + v, 0), rest = total - 546 * k;
+  const ins = w.map((v) => 546 + Math.floor((rest * v) / sum));
+  ins[k - 1] += total - ins.reduce((a, v) => a + v, 0);
+  return ins;
 }
 // make a made-up transaction a donation: 0.0005 to 0.3 BCH (log-uniform), so every firework turns up
 function madeUpDonation(tx) {
@@ -1004,7 +1069,7 @@ function madeUpDonation(tx) {
   tx.outputs.push(tx.donation); tx.size += 34;
 }
 function addMadeUp(fee, delay, sound) { // sound: also play it (not for the crowd at the start or the 1,000 at once)
-  const tx = madeUpTx();
+  const tx = madeUpTx(fee);
   addSoul(fee, delay, tx);
   if (sound) { sonifier.event(tx); celebrate(tx); }
 }
@@ -1031,6 +1096,9 @@ function stressTx() {
   for (let k = 0; k < nOut; k++) outputs.push(Math.floor(546 * Math.pow(1000 * SATS_PER_BCH / 546, rnd())));
   const tx = { type: "tx", t: sonifier.serverNow(), txid: `synthetic-${nextId}`, outputs, size, fee: Math.round(fee * size), nft, ft, memo };
   if (rnd() < 0.005) madeUpDonation(tx); // ~0.9 a second
+  tx.fee = Math.round(fee * tx.size);
+  if (shotWild) wildInputs(tx, fee);
+  else tx.inputs = madeUpInputs(Math.max(1, ins), tx);
   return { tx, fee };
 }
 // Stress-test miner: the line is in fee order, so take from the front whatever still fits under the limit.
@@ -1055,7 +1123,7 @@ function addSoul(fee, delay, tx) { // fee: sats per byte; delay < 0: appear in p
   while (lo < hi) { const m = (lo + hi) >> 1; if (line[m].fee >= fee) lo = m + 1; else hi = m; }
   line.splice(lo, 0, s);
   s.p = lo;
-  if (delay >= 0 && !reduce && lo < cap) { s.st = 1; s.t0 = now + delay; s.u = -1; s.dx = (hash(s.id, 7) - 0.5) * 0.12; arrivals.push(s); }
+  if (delay >= 0 && !reduce && lo < cap) { s.st = 1; s.t0 = now + delay; s.u = -1; s.f = 0; s.dx = (hash(s.id, 7) - 0.5) * 0.12; s.vortex = undefined; arrivals.push(s); } // (its vortex: worked out as it starts to fall, in step)
   else farDirty = true;
   return s;
 }
@@ -1215,10 +1283,12 @@ function step(dt) {
     }
   }
   for (let i = leavers.length - 1; i >= 0; i--) if (now >= leavers[i].launch + LEAVE_FOR) leavers.splice(i, 1);
+  for (const s of arrivals) if (s.vortex === undefined && now >= s.t0) s.vortex = vortexOf(s); // (as it starts to fall: where it is then)
   for (let i = arrivals.length - 1; i >= 0; i--) {
     const s = arrivals[i];
-    s.u = (now - s.t0) / FALL;
-    if (s.u >= 1) { s.st = 0; arrivals.splice(i, 1); farDirty = true; }
+    const fall = s.vortex ? VORTEX_FALL : FALL, since = now - s.t0;
+    s.u = Math.min(1, since / fall); s.f = clamp((since - fall) / FORM, 0, 1); // falling; then forming (see LAND_FROM)
+    if (since >= fall + FORM) { s.st = 0; s.vortex = null; arrivals.splice(i, 1); farDirty = true; }
   }
   const b = block;
   if (!b) return;
@@ -1245,7 +1315,8 @@ function step(dt) {
 // where a soul is partway through its drop (u 0..1) -> wx, wz, we
 function arrivalPos(s, u) {
   standAt(s);
-  const left = Math.pow(1 - u, 2.2), stand = ground(gz) + 0.2, top = aboveFrame(gz, 40); // top: just above the frame
+  // top: just above the frame. Every soul falls alike (evenly enough that a vortex's turns show).
+  const left = Math.pow(1 - u, 1.5), stand = ground(gz) + 0.2, top = aboveFrame(gz, 40);
   wx = gx + s.dx * gz * left; wz = gz; we = stand + (top - stand) * left;
 }
 // where a soul is partway through its flight to the ferry's lantern -> wx, wz, we
@@ -1256,12 +1327,356 @@ function flightPos(s, u) {
   wx = s.ox + (lx - s.ox) * w;
   we = s.oe + (BOW_LAMP[2] - s.oe) * w + s.k * ARC_REACH * (1 - Math.exp(-wz / ARC_REACH)) * Math.sin(Math.PI * uu);
 }
-// Landing: the light falls toward the middle of the soul's body (LAND_MID soul heights up), and over the last
-// part of its fall (from u = LAND_FROM) the soul condenses around it: the tail fades, the light swells into a
-// soft glow and dims, and the soul fades in, full size, inside it. At rest the glow is gone and the soul is there.
-const LAND_FROM = 0.68, LAND_MID = 0.6;
+// Landing: the light falls toward the middle of the soul's body (LAND_MID soul heights up), its tail shortening
+// and fading over the last part of its fall (from u = LAND_FROM); once it is there, the soul forms from it (over
+// FORM seconds, s.f 0..1): the light spreads out from its point to fill the soul's outline (FILL_SPREAD s), and
+// the glowing shape cools into the soul (from FILL_COOL s on, over FILL_COOLING s), while the light itself fades
+// into it, with a soft swell of its glow as the shape lights up. At rest the light is gone and the soul is there.
+const LAND_FROM = 0.68, LAND_MID = 0.6, FORM = 0.85, FILL_SPREAD = 0.5, FILL_COOL = 0.35, FILL_COOLING = 0.5;
+const ease01 = (v) => { v = clamp(v, 0, 1); return v * v * (3 - 2 * v); };
+const fillCooled = (fs) => ease01((fs - FILL_COOL) / FILL_COOLING); // 0: all light .. 1: all soul (fs: seconds forming)
+// the soul's outline, lit from its light at (hx, hy) out to R px, a: how much it still glows; x, y, size, t as for
+// drawSoul (the same sway), so the light fills exactly the body that's fading in under it
+function litOutline(x, y, size, s, t, hx, hy, R, a, col) {
+  const B = size * s.tr.scale, sw = Math.sin(t * 2.1 + s.id * 0.9) * 0.08;
+  ctx.setTransform(DPR * B, 0, 0, DPR * B, DPR * x, DPR * y);
+  const cx = (hx - x) / B, cy = (hy - y) / B, r = R / B, g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+  g.addColorStop(0, `rgba(${col},${0.85 * a})`); g.addColorStop(0.7, `rgba(${col},${0.77 * a})`); g.addColorStop(1, `rgba(${col},0)`);
+  ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = g;
+  wisp(sw);
+  if (B >= 16) for (const [ax, rot] of [[-0.31, -0.5], [0.31, 0.5]]) { // the arms (a full-detail soul's)
+    ctx.moveTo(ax + 0.065 * Math.cos(rot), -0.48 + 0.065 * Math.sin(rot)); ctx.ellipse(ax, -0.48, 0.065, 0.042, rot, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  ctx.globalCompositeOperation = "source-over"; ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+// The stars of a soul with several inputs (see VORTEX_FALL), or null for a soul that drops in as one light. The
+// biggest input is the centre (big); each other star { amount, r: how far out it starts (metres), head: its size,
+// path, heads, dead: its course by gravity (see vortexGravity) }.
+function vortexOf(s) {
+  // (one input, or none known: its one star, the centre, with the same light and trail as any vortex's)
+  const ins = s.tx.inputs && s.tx.inputs.length ? s.tx.inputs : [1];
+  standAt(s); project(gx, gz, ground(gz));
+  if (sS < VORTEX_MIN_S) return null;
+  return vortexStars(ins, s.id);
+}
+function vortexStars(ins, id) {
+  const s = { id }; // (only its id: for the hashes)
+  const pick = ins.length > VORTEX_STARS ? [...ins].sort((a, b) => b - a).slice(0, VORTEX_STARS) : ins;
+  const n = pick.length, lo = Math.log(Math.max(1, Math.min(...pick))), hi = Math.log(Math.max(1, Math.max(...pick)));
+  // the orbits' scale: a little wider up to 12 inputs, then with the square root of how many there are (from 10),
+  // so many lights stay about as far apart as ten do instead of crowding into a cloud
+  const R0 = VORTEX_R * (1 + 0.2 * Math.min(1, (n - 2) / 10)) * Math.sqrt(Math.max(1, n / 10));
+  const big = pick.indexOf(Math.max(...pick));
+  const stars = pick.map((a, k) => {
+    const rel = hi > lo ? (Math.log(Math.max(1, a)) - lo) / (hi - lo) : 0.5; // 0 the smallest input here .. 1 the biggest
+    return {
+      amount: Math.max(1, a), big: k === big, head: 1.5 + 3.5 * rel * rel,
+      // (the small ones kept out of the big ones' glow by VORTEX_CLEAR)
+      r: R0 * (0.12 + 1.2 * Math.pow(1 - rel, 0.45)) * (0.92 + 0.16 * hash(s.id * 131 + k, 9)) + VORTEX_CLEAR * Math.pow(1 - rel, 0.3),
+    };
+  });
+  vortexGravity(stars, id, lo, hi);
+  return stars;
+}
+// The vortex by gravity, worked out once when the soul starts to drop in: the biggest input is the centre, at rest
+// on the line of the fall; each other star sets off at its distance (r), at a random angle, on a circular orbit
+// round everything closer in. Then only gravity moves them: the centre's pull and each other's (the stars weigh
+// GRAV_PULL times the centre all together, each by its amount^0.3), softened closer than GRAV_SOFT metres so close
+// passes don't fling them away; cooling (GRAV_COOL), a drag on how far a star's velocity strays from a circular
+// orbit, so they gather into clumps and streams instead of heating up and flying apart; and a gentle drag along
+// the orbit (GRAV_DRAG). Stars closer than GRAV_REACH of their glows' reach together, and bound to each other
+// (moving apart slower than their escape speed there), merge: mass, momentum and amount together, at their centre
+// of mass, the heavier carrying on (and bigger); faster ones pass through. One that falls into the centre, bound,
+// joins it. Colour: each star's hue is the angle it starts at round the centre (red, through the rainbow and
+// hot magenta, back to red), and its saturation how far out it starts (so the centre, white, fits in), kept as a
+// vector (cos, sin of the hue, as long as the saturation); merging adds them by mass, so stars of unlike hues
+// make a paler light, and a crowd of them tends to white. Where a star goes after it starts doesn't change it. Time: 1 = the closing (VORTEX_MEET of the fall), in GRAV_STEPS stored steps (GRAV_SUB each); G is set
+// so a star at the middle distance would go round GRAV_TURNS times. Each star gets path (x across, z inland,
+// metres from the line of the fall, per step), heads (its size per step), hues (its hue vector per step)
+// and dead (the step it merged at).
+const GRAV_PULL = 3, GRAV_SOFT = 0.2, GRAV_COOL = 10, GRAV_DRAG = 0.8, GRAV_TURNS = 2, GRAV_REACH = 0.2, GRAV_STEPS = 160, GRAV_SUB = 2;
+const gravHead = (amt, lo, hi) => { const rel = hi > lo ? clamp((Math.log(amt) - lo) / (hi - lo), 0, 1) : 0.5; return 1.5 + 3.5 * rel * rel; };
+const gravGlow = (head) => 0.042 * head; // a star's glow's reach, metres (about 4.7 core radii of 0.009 m per unit of head)
+function vortexGravity(stars, id, lo, hi) {
+  const lights = stars.filter((s) => !s.big), n = lights.length, e2 = GRAV_SOFT * GRAV_SOFT, dt = 1 / (GRAV_STEPS * GRAV_SUB);
+  let M = 1;
+  const wt = lights.map((s) => Math.pow(s.amount, 0.3)), wsum = wt.reduce((a, b) => a + b, 0) || 1;
+  const m = Float64Array.from(wt, (w) => (GRAV_PULL * w) / wsum), amt = Float64Array.from(lights, (s) => s.amount);
+  const x = new Float64Array(n), y = new Float64Array(n), vx = new Float64Array(n), vy = new Float64Array(n);
+  const ax = new Float64Array(n), ay = new Float64Array(n), alive = new Uint8Array(n).fill(1), dead = new Int32Array(n).fill(GRAV_STEPS + 1);
+  const into = new Int32Array(n).fill(-2), rank = new Float64Array(n), idx = Array.from({ length: n }, (_, i) => i);
+  const hx = new Float64Array(n), hy = new Float64Array(n); // hue vectors
+  const reach = Float64Array.from(lights, (s) => GRAV_REACH * gravGlow(gravHead(s.amount, lo, hi))); // (each one's share of the merging distance)
+  const rs = lights.map((s) => s.r).sort((a, b) => a - b), rRef = rs[Math.floor(rs.length / 2)] || 0.5;
+  const G = (Math.pow(2 * Math.PI * GRAV_TURNS, 2) * Math.pow(rRef, 3)) / (M * (1 + 0.5 * GRAV_PULL));
+  let inside = M;
+  for (const i of idx.slice().sort((a, b) => lights[a].r - lights[b].r)) {
+    const a = 2 * Math.PI * hash(id * 977 + i, 21), r = lights[i].r, vc = Math.sqrt((G * inside) / r);
+    x[i] = r * Math.cos(a); y[i] = r * Math.sin(a); vx[i] = -vc * Math.sin(a); vy[i] = vc * Math.cos(a);
+    const sat = Math.pow(clamp(r / (1.2 * rRef), 0, 1), 0.7); // (the farther out it starts, the more saturated)
+    hx[i] = sat * Math.cos(a); hy[i] = sat * Math.sin(a);
+    inside += m[i];
+  }
+  const path = lights.map(() => new Float32Array((GRAV_STEPS + 1) * 2)), heads = lights.map(() => new Float32Array(GRAV_STEPS + 1));
+  const hues = lights.map(() => new Float32Array((GRAV_STEPS + 1) * 2));
+  const accel = () => {
+    const live = idx.filter((i) => alive[i]).sort((a, b) => x[a] * x[a] + y[a] * y[a] - (x[b] * x[b] + y[b] * y[b]));
+    let enc = M; for (const i of live) { rank[i] = enc; enc += m[i]; } // the mass closer in than each star
+    for (const i of live) {
+      const q = x[i] * x[i] + y[i] * y[i], r2 = q + e2, r = Math.sqrt(q) || 1e-6, f = (G * M) / (r2 * Math.sqrt(r2));
+      const vc = Math.sqrt((G * rank[i]) / r), cx = (-vc * y[i]) / r, cy = (vc * x[i]) / r; // its circular orbit's velocity
+      ax[i] = -f * x[i] - GRAV_COOL * (vx[i] - cx) - GRAV_DRAG * cx; ay[i] = -f * y[i] - GRAV_COOL * (vy[i] - cy) - GRAV_DRAG * cy;
+    }
+    for (let a = 0; a < live.length; a++) for (let b = a + 1; b < live.length; b++) {
+      const i = live[a], j = live[b], dx = x[j] - x[i], dy = y[j] - y[i], r2 = dx * dx + dy * dy + e2, f = G / (r2 * Math.sqrt(r2));
+      ax[i] += f * m[j] * dx; ay[i] += f * m[j] * dy; ax[j] -= f * m[i] * dx; ay[j] -= f * m[i] * dy;
+    }
+  };
+  const merge = (k) => {
+    let any = false;
+    for (let i = 0; i < n; i++) {
+      if (!alive[i]) continue;
+      const r = Math.hypot(x[i], y[i]);
+      if (r < reach[i] && vx[i] * vx[i] + vy[i] * vy[i] < (2 * G * (M + m[i])) / Math.sqrt(r * r + e2)) {
+        alive[i] = 0; dead[i] = k; into[i] = -1; M += m[i]; any = true; continue; // into the centre
+      }
+      for (let j = i + 1; j < n; j++) {
+        if (!alive[j]) continue;
+        const dx = x[j] - x[i], dy = y[j] - y[i], rr = reach[i] + reach[j];
+        if (dx * dx + dy * dy > rr * rr) continue;
+        const d = Math.hypot(dx, dy), mm = m[i] + m[j];
+        const dvx = vx[j] - vx[i], dvy = vy[j] - vy[i];
+        if (dvx * dvx + dvy * dvy > (2 * G * mm) / Math.sqrt(d * d + e2)) continue; // passing through, too fast to hold
+        const [a, b] = m[i] >= m[j] ? [i, j] : [j, i];
+        x[a] = (m[i] * x[i] + m[j] * x[j]) / mm; y[a] = (m[i] * y[i] + m[j] * y[j]) / mm;
+        vx[a] = (m[i] * vx[i] + m[j] * vx[j]) / mm; vy[a] = (m[i] * vy[i] + m[j] * vy[j]) / mm;
+        hx[a] = (m[i] * hx[i] + m[j] * hx[j]) / mm; hy[a] = (m[i] * hy[i] + m[j] * hy[j]) / mm;
+        m[a] = mm; amt[a] = amt[i] + amt[j]; reach[a] = GRAV_REACH * gravGlow(gravHead(amt[a], lo, hi)); alive[b] = 0; dead[b] = k; into[b] = a; any = true;
+        path[b][2 * k] = x[a]; path[b][2 * k + 1] = y[a]; // (its trail runs into where they met)
+        if (b === i) break;
+      }
+    }
+    return any;
+  };
+  const store = (k) => {
+    for (let i = 0; i < n; i++) {
+      if (alive[i]) {
+        path[i][2 * k] = x[i]; path[i][2 * k + 1] = y[i]; heads[i][k] = gravHead(amt[i], lo, hi); hues[i][2 * k] = hx[i]; hues[i][2 * k + 1] = hy[i];
+      } else { // gone: it stays where it went (for the end of its trail), as it was
+        const d = dead[i];
+        if (into[i] === -1 && k === d) { path[i][2 * d] = 0; path[i][2 * d + 1] = 0; } // (into the centre)
+        path[i][2 * k] = path[i][2 * d]; path[i][2 * k + 1] = path[i][2 * d + 1];
+        heads[i][k] = heads[i][d - 1]; hues[i][2 * k] = hues[i][2 * d - 2]; hues[i][2 * k + 1] = hues[i][2 * d - 1];
+      }
+    }
+  };
+  lights.forEach((s, i) => { s.path = path[i]; s.heads = heads[i]; s.hues = hues[i]; s.dead = GRAV_STEPS + 1; });
+  store(0); accel();
+  // Worked out as it's needed, not all at once: stars.advance(K) runs it on to stored step K (a couple of steps a
+  // frame as it plays; see vortexReady), so many vortexes starting together don't stall a frame.
+  let k = 0;
+  stars.advance = (K) => {
+    for (K = Math.min(GRAV_STEPS, K); k < K; ) {
+      k++;
+      for (let s = 0; s < GRAV_SUB; s++) { // leapfrog: kick, drift, kick
+        for (let i = 0; i < n; i++) if (alive[i]) { vx[i] += 0.5 * dt * ax[i]; vy[i] += 0.5 * dt * ay[i]; x[i] += dt * vx[i]; y[i] += dt * vy[i]; }
+        accel();
+        for (let i = 0; i < n; i++) if (alive[i]) { vx[i] += 0.5 * dt * ax[i]; vy[i] += 0.5 * dt * ay[i]; }
+        if (merge(k)) accel();
+      }
+      for (let i = 0; i < n; i++) if (!alive[i] && lights[i].dead > GRAV_STEPS) lights[i].dead = dead[i];
+      store(k);
+    }
+  };
+}
+// a vortex worked out as far as v (0..1 of the way to meeting), and a step beyond (for in between)
+const vortexReady = (stars, v) => stars.advance(Math.ceil(clamp(v, 0, 1) * GRAV_STEPS) + 1);
+const starGone = (st, v) => !st.big && v * GRAV_STEPS > st.dead; // merged into another star (or the centre) by v
+const starHead = (st, v) => (st.big ? st.head : st.heads[Math.min(GRAV_STEPS, Math.max(0, Math.round(v * GRAV_STEPS)))]);
+// A star's colour at v as "r,g,b": its hue (see vortexGravity), as saturated as its hue vector is long (set by
+// how far out it started; paler for a merger of unlike hues), over the falling light's pale blue-white. The
+// centre: that blue-white.
+const STAR_WHITE = [190, 240, 255];
+function hueRGB(h) { // full saturation, 60% light (as the lanterns), h in degrees
+  const ch = (n) => { const k = (((n + h / 30) % 12) + 12) % 12; return 255 * (0.6 - 0.4 * Math.max(-1, Math.min(k - 3, 9 - k, 1))); };
+  return [ch(0), ch(8), ch(4)];
+}
+const whiters = new Map(), whiter = (c) => { // halfway to white (kept, as starColour's colours are few)
+  let w = whiters.get(c);
+  if (!w) { if (whiters.size > 2048) whiters.clear(); w = c.split(",").map((x) => Math.round((+x + 255) / 2)).join(","); whiters.set(c, w); }
+  return w;
+};
+function starColour(st, v) {
+  if (st.big) return STAR_WHITE.join(",");
+  const k = Math.min(GRAV_STEPS, Math.max(0, Math.round(clamp(v, 0, 1) * GRAV_STEPS))), cx = st.hues[2 * k], cy = st.hues[2 * k + 1];
+  const sat = clamp(Math.hypot(cx, cy), 0, 1);
+  const c = hueRGB((Math.atan2(cy, cx) * 180) / Math.PI);
+  return STAR_WHITE.map((w, i) => (Math.round(w + (c[i] - w) * sat) >> 3) << 3).join(","); // (to the nearest 8: the glows are kept by colour)
+}
+// where a star is at v (0..1 of the way to meeting), metres from the line of the fall -> [across, inland]; drawn in
+// toward the centre over the last part, so they all meet it on cue
+function starOffset(st, v) {
+  if (st.big) return [0, 0];
+  const f = clamp(v, 0, 1) * GRAV_STEPS, i = Math.min(GRAV_STEPS - 1, Math.floor(f)), fr = f - i, P = st.path;
+  const k = 1 - ease01((v - 0.6) / 0.4);
+  return [(P[2 * i] + (P[2 * i + 2] - P[2 * i]) * fr) * k, (P[2 * i + 1] + (P[2 * i + 3] - P[2 * i + 1]) * fr) * k];
+}
+// where one of a soul's stars is at u (0..1 of the fall) -> wx, wz, we
+function starPos(s, st, u) {
+  const [dx, dz] = starOffset(st, Math.min(1, u / VORTEX_MEET));
+  arrivalPos(s, u);
+  wx += dx; wz = Math.max(1.5, wz + dz);
+}
+// A falling soul's light: a bright core with a glow around it, in proportion to its soul (S0: a normal soul's
+// height where it lands, px, so the light keeps its size as it falls) and as much bigger for a bigger transaction
+// as its soul is (k: its traits' scale, which grows with the log of its bytes); forming (fs: seconds since it
+// landed; see FORM), the core fades and the glow spreads and fades into the lit outline, swelling softly as it does.
+const HEAD_R = 2.2, HEAD_GLOW = 0.55;
+const headCoreR = (S0, k) => Math.max(HEAD_R, 0.05 * S0) * k, headGlowR = (S0, k) => Math.max(4, 0.25 * S0) * k;
+// the light's glow, drawn once per colour and stamped: 1 at the middle, 0.4 a third of the way out, gone at the edge
+const headGlows = new Map();
+function headGlow(col) {
+  let c = headGlows.get(col);
+  if (!c) {
+    c = document.createElement("canvas"); c.width = c.height = 64;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, `rgba(${col},1)`); gr.addColorStop(0.3, `rgba(${col},0.4)`); gr.addColorStop(1, `rgba(${col},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); headGlows.set(col, c);
+  }
+  return c;
+}
+function arrivalHead(hx, hy, S0, k, fs, col) {
+  const spread = ease01(fs / FILL_SPREAD), core = 1 - ease01(fs / 0.35);
+  const swell = 0.5 * Math.sin(Math.PI * clamp((fs - 0.25) / 0.45, 0, 1)), glow = 1 - ease01(fs / 0.45) + swell;
+  const r = headGlowR(S0, k) + (0.7 * S0 * k - headGlowR(S0, k)) * spread, a = HEAD_GLOW * glow;
+  ctx.globalAlpha = Math.min(1, a); ctx.drawImage(headGlow(col), hx - r, hy - r, 2 * r, 2 * r); ctx.globalAlpha = 1;
+  if (core > 0) { ctx.fillStyle = `rgba(${col},${core})`; ctx.beginPath(); ctx.arc(hx, hy, headCoreR(S0, k), 0, Math.PI * 2); ctx.fill(); }
+}
+// Far off, where a soul is too small for its vortex (see VORTEX_MIN_S), one with many inputs gets a cheap stand-in:
+// a few coloured dots (about log2 of its inputs, 3 to 8), each with a short fading tail, on a tilted ring round its
+// light, turning faster and closing onto it as a vortex would, coloured round the wheel like a vortex's stars. Only
+// from FAR_SWIRL_FROM inputs, fading in to full by 3 more, so there's no pop where it starts.
+const FAR_SWIRL_FROM = 5;
+const FAR_SWIRL_COLS = Array.from({ length: 9 }, (_, n) => Array.from({ length: n }, (_, i) => `rgb(${hueRGB((360 * i) / n).map(Math.round)})`)); // [count][i]
+function drawFarSwirls() {
+  const N = 6;
+  ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "butt";
+  for (const s of arrivals) {
+    const ins = s.tx.inputs, n = ins ? ins.length : 0;
+    if (s.vortex || n < FAR_SWIRL_FROM || s.u < 0 || s.u >= VORTEX_MEET) continue;
+    const k = ease01((n - FAR_SWIRL_FROM) / 3);
+    if (!k) continue;
+    const count = clamp(Math.round(Math.log2(n)), 3, 8), spin = 2 * Math.PI * hash(s.id, 22);
+    const reach = VORTEX_R * 1.2 * Math.sqrt(Math.max(1, n / 10)) * 1.3; // metres: about where a vortex's stars start
+    arrivalPos(s, s.u); project(wx, wz, we);
+    const up = LAND_MID * sS; // (aimed at the body's middle, as the light is)
+    const at = (i, uu) => { // dot i at uu: on the closing, turning ring round where the light was then -> sx, sy
+      const v = Math.min(1, uu / VORTEX_MEET), r = reach * (1 - Math.pow(v, 1.6));
+      const th = (2 * Math.PI * i) / count + spin + 2 * Math.PI * 2 * (0.4 * v + 0.6 * v * v * v);
+      arrivalPos(s, uu); project(wx + r * Math.cos(th), Math.max(1.5, wz + r * Math.sin(th)), we);
+      return 0.65 + 0.35 * Math.sin(th); // (nearer: brighter)
+    };
+    const fade = k * (1 - ease01((s.u / VORTEX_MEET - 0.7) / 0.3));
+    for (let i = 0; i < count; i++) {
+      ctx.strokeStyle = ctx.fillStyle = FAR_SWIRL_COLS[count][i];
+      let px = 0, py = 0;
+      for (let j = 0; j <= N; j++) { // its tail, then the dot
+        const a = at(i, Math.max(0, s.u - VORTEX_TRAIL * 0.6 * (1 - j / N))), x = sx, y = sy - up;
+        if (j) {
+          const q = j / N; ctx.globalAlpha = 0.6 * q * fade * a; ctx.lineWidth = 0.6 + 0.6 * q;
+          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+        }
+        if (j === N) { ctx.globalAlpha = fade * a; ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6); }
+        px = x; py = y;
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+// The vortexes of the souls dropping in: each star a light with a tail, as bright as it is near. Merging (over
+// the last part of the closing) the small ones fade into the biggest, and it turns into the soul's own light
+// (arrivalHead: its size, colour and glow) just as they meet, where streaks() takes over the head; the biggest
+// star's trail goes on as the soul's tail, all the way down, shortening and fading as the soul lands.
+// a star's glow, drawn once per colour (starColour's, to the nearest 8 in each channel) and stamped: a radial fade
+// of that colour, 0.9 at the middle, 0.35 a third of the way out, gone at the edge
+const starGlows = new Map();
+function starGlow(key) {
+  let c = starGlows.get(key);
+  if (!c) {
+    if (starGlows.size > 2048) starGlows.clear();
+    c = document.createElement("canvas"); c.width = c.height = 32;
+    const g = c.getContext("2d"), gr = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, `rgba(${key},0.9)`); gr.addColorStop(0.3, `rgba(${key},0.35)`); gr.addColorStop(1, `rgba(${key},0)`);
+    g.fillStyle = gr; g.fillRect(0, 0, 32, 32); starGlows.set(key, c);
+  }
+  return c;
+}
+function drawVortexes() {
+  const col = "190,240,255";
+  ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "butt"; // (flat ends: the steps of a trail meet without overlapping, so no bright beads where they join)
+  for (const s of arrivals) {
+    if (!s.vortex || s.u < 0) continue;
+    arrivalPos(s, s.u); project(wx, wz, we);
+    const up = LAND_MID * sS; // aimed at the body's middle, lifted just as the soul's own light is (see streaks)
+    standAt(s); project(gx, gz, ground(gz)); const S0 = sS;
+    const N = s.vortex.length < 2 ? 10 : S0 < 25 ? 10 : 16; // trail steps (fewer where it's small, or a lone light's nearly straight trail): enough that the fade looks smooth
+    const v = Math.min(1, s.u / VORTEX_MEET), mg = clamp((v - 0.55) / 0.45, 0, 1), m = mg * mg * (3 - 2 * mg);
+    vortexReady(s.vortex, v);
+    const fade = clamp((v - 0.82) / 0.18, 0, 1); // the small ones: into the biggest, at the end of their plunge
+    const head = s.u < VORTEX_MEET, land = landing(s), big = s.tr.scale; // big: its transaction's size, as its soul's
+    const vTail = Math.max(0, s.u - VORTEX_TRAIL) / VORTEX_MEET; // (when its trail starts)
+    // many small ones: their glows and trails each dimmer, so together they don't blaze white, and more so as they close in (their
+    // cores not: each input stays a light of its own)
+    let n1 = 0; for (const st of s.vortex) if (!st.big && !starGone(st, v)) n1++; // (those still their own)
+    n1 = Math.max(1, n1);
+    const crowd = Math.min(1, 3 / Math.sqrt(n1 * (1 + n1 * v * v)));
+    for (const st of s.vortex) {
+      if (!st.big && (!head || starGone(st, vTail))) continue; // (merged before its trail began: nothing left of it)
+      const size = starHead(st, v), sc = starColour(st, v); // (its colour now)
+      const keep = st.big ? 1 - land : (1 - fade) * crowd; // how much of this star (its trail) is still to be seen
+      const hr = Math.max(0.8 / 0.55, (headCoreR(S0, big) * size) / 5 / 0.55); // (the biggest: the soul's light)
+      let px = 0, py = 0, a = 1;
+      ctx.strokeStyle = `rgb(${sc})`; // (one colour; each step's strength by globalAlpha)
+      for (let k = 0; k <= N; k++) {
+        const uk = Math.max(0, s.u - VORTEX_TRAIL * (1 - k / N));
+        starPos(s, st, uk); project(wx, wz, we);
+        const x = sx, y = sy - up;
+        a = clamp(0.55 + 2.5 * (sS / S0 - 0.95), 0.45, 1);
+        if (k && keep > 0 && !starGone(st, Math.min(1, uk / VORTEX_MEET) - 1 / GRAV_STEPS)) { // (a merged one's trail: up to where it met)
+          const q = st.big && land > 0 ? clamp((k / N - land) / (1 - land), 0, 1) : k / N; // (landing: shortening)
+          if (q > 0) {
+            ctx.globalAlpha = Math.min(1, 0.6 * q * a * keep); ctx.lineWidth = Math.max(0.6, hr * 0.7 * q * (1 - 0.5 * (st.big ? m : fade)));
+            ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+          }
+        }
+        px = x; py = y;
+      }
+      ctx.globalAlpha = 1;
+      if (!head) continue;
+      if (st.big) { // turning into the soul's light
+        const R = headGlowR(S0, big), g0 = 0.9 * a * (1 - m) + HEAD_GLOW * m, g1 = 0.35 * a * (1 - m) + 0.4 * HEAD_GLOW * m;
+        const g = ctx.createRadialGradient(px, py, 0, px, py, R);
+        g.addColorStop(0, `rgba(${col},${g0})`); g.addColorStop(0.3, `rgba(${col},${g1})`); g.addColorStop(1, `rgba(${col},0)`);
+        ctx.fillStyle = g; ctx.fillRect(px - R, py - R, 2 * R, 2 * R);
+        const r = headCoreR(S0, big);
+        ctx.fillStyle = `rgba(${Math.round(255 - 65 * m)},${Math.round(255 - 15 * m)},255,${a + (1 - a) * m})`;
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+        continue;
+      }
+      if (fade >= 1 || starGone(st, v)) continue;
+      const R = hr * 2.6;
+      ctx.globalAlpha = Math.min(1, a * keep); ctx.drawImage(starGlow(sc), px - R, py - R, 2 * R, 2 * R);
+      ctx.globalAlpha = Math.min(1, a * (1 - fade)); ctx.fillStyle = `rgb(${whiter(sc)})`; // its core: halfway to white
+      ctx.beginPath(); ctx.arc(px, py, Math.max(0.8, hr * 0.55), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
 const landing = (s) => { const v = clamp((s.u - LAND_FROM) / (1 - LAND_FROM), 0, 1); return v * v * (3 - 2 * v); }; // 0..1, eased
-const arrivalWisp = (s) => (s.u > LAND_FROM ? sS : 0);                               // full size, fading in
+const arrivalWisp = (s) => (s.f > 0 ? sS : 0);                                       // full size, forming
 const flightWisp = (s) => (s.u < 0.35 ? 0.9 * ppm(s.oz, s.oe) * (1 - s.u / 0.35) : 0); // shrinks to a spark as it leaves
 
 // souls in the air: a streak of light each, plus the wisp itself while close to the ground. land: arriving
@@ -1276,38 +1691,36 @@ function streaks(list, pos, lag, col, wispSize, t, land = false) {
   ctx.globalCompositeOperation = land ? "lighter" : "source-over"; ctx.lineCap = "round";
   ctx.strokeStyle = `rgba(${col},0.5)`; ctx.lineWidth = 1; ctx.beginPath();
   for (const s of list) {
-    if (s.u < 0) continue;
-    pos(s, Math.max(0, s.u - lag)); project(wx, wz, we);
-    const up = land ? LAND_MID * sS : 0, tx = sx, ty = sy - up; // (a soul's size doesn't change as it falls)
+    if (s.u < 0 || (land && s.vortex && s.u < VORTEX_MEET)) continue; // a vortex: its stars until they meet
+    let S0 = 0;
+    if (land) { standAt(s); project(gx, gz, ground(gz)); S0 = sS; } // its soul's height where it lands: the light's size
     pos(s, s.u); project(wx, wz, we);
-    const m = land ? landing(s) : 0;
-    if (sS >= 6) thick.push(tx, ty, sx, sy - up, m, sS); else { ctx.moveTo(tx, ty); ctx.lineTo(sx, sy - up); thin.push(sx, sy - up, sS); }
+    const up = land ? LAND_MID * sS : 0, hx = sx, hy = sy, hS = sS; // lifted by the soul's height at the head, so it lands at the chest
+    pos(s, Math.max(0, s.u - (s.vortex ? 0 : lag))); project(wx, wz, we); // (a vortex: its biggest star's trail is its tail)
+    const tx = sx, ty = sy - up; // (the tail lifted as much as its head: a soul's size doesn't change as it falls)
+    sx = hx; sy = hy; sS = hS;
+    const m = land ? landing(s) : 0, fs = land ? (s.f || 0) * FORM : 0; // m: the tail going; fs: seconds forming
+    if (sS >= 6) thick.push(tx, ty, sx, sy - up, m, sS, s.tr.scale, S0, fs); else { ctx.moveTo(tx, ty); ctx.lineTo(sx, sy - up); thin.push(sx, sy - up, sS); }
     const ws = wispSize(s);
-    if (ws >= FAR_S) wisps.push(s, sx, sy, ws, m);
+    if (ws >= FAR_S) wisps.push(s, sx, sy, ws, land ? fs : m);
   }
   ctx.stroke();
   ctx.lineWidth = 1.7;
   if (!land) { // leaving: every tail and every head alike, so all the tails as one shape and all the heads as another
     ctx.beginPath();
-    for (let i = 0; i < thick.length; i += 6) { ctx.moveTo(thick[i], thick[i + 1]); ctx.lineTo(thick[i + 2], thick[i + 3]); }
+    for (let i = 0; i < thick.length; i += 9) { ctx.moveTo(thick[i], thick[i + 1]); ctx.lineTo(thick[i + 2], thick[i + 3]); }
     ctx.stroke();
     ctx.globalCompositeOperation = "lighter"; // the heads add to their tails, as on the scene
     ctx.fillStyle = `rgb(${col})`; ctx.beginPath();
-    for (let i = 0; i < thick.length; i += 6) { ctx.moveTo(thick[i + 2] + 2.2, thick[i + 3]); ctx.arc(thick[i + 2], thick[i + 3], 2.2, 0, Math.PI * 2); }
+    for (let i = 0; i < thick.length; i += 9) { ctx.moveTo(thick[i + 2] + 2.2, thick[i + 3]); ctx.arc(thick[i + 2], thick[i + 3], 2.2, 0, Math.PI * 2); }
     ctx.fill();
-  } else for (let i = 0; i < thick.length; i += 6) { // landing: one by one, each fades on its own as it lands
-    const [ax, ay, hx, hy, m, S] = thick.slice(i, i + 6);
-    if (m < 1) {
+  } else for (let i = 0; i < thick.length; i += 9) { // landing: one by one, each fades on its own as it lands
+    const [ax, ay, hx, hy, m, , k, S0, fs] = thick.slice(i, i + 9);
+    if (m < 1 && (ax !== hx || ay !== hy)) {
       ctx.strokeStyle = `rgba(${col},${0.5 * (1 - m)})`;
       ctx.beginPath(); ctx.moveTo(ax + (hx - ax) * m, ay + (hy - ay) * m); ctx.lineTo(hx, hy); ctx.stroke(); // tail shortening
     }
-    if (m > 0) { // the light swelling into a soft glow the size of the body, and dimming
-      const r = 2.2 + 0.55 * S * m, g = ctx.createRadialGradient(hx, hy, 0, hx, hy, r), a = 0.9 * (1 - m);
-      g.addColorStop(0, `rgba(${col},${a})`); g.addColorStop(0.35, `rgba(${col},${a * 0.45})`); g.addColorStop(1, `rgba(${col},0)`);
-      ctx.fillStyle = g; ctx.fillRect(hx - r, hy - r, 2 * r, 2 * r);
-    } else {
-      ctx.fillStyle = `rgb(${col})`; ctx.beginPath(); ctx.arc(hx, hy, 2.2, 0, Math.PI * 2); ctx.fill();
-    }
+    arrivalHead(hx, hy, S0, k, fs, col);
   }
   ctx.fillStyle = `rgb(${col})`; ctx.beginPath(); // the far ones' heads: small squares, as one shape
   for (let i = 0; i < thin.length; i += 3) { const w = clamp(thin[i + 2] * 0.5, 1.2, 2.4); ctx.rect(thin[i] - w / 2, thin[i + 1] - w / 2, w, w); }
@@ -1316,7 +1729,15 @@ function streaks(list, pos, lag, col, wispSize, t, land = false) {
   ctx.globalCompositeOperation = "source-over";
   for (let i = 0; i < wisps.length; i += 5) {
     const s = wisps[i], x = wisps[i + 1], y = wisps[i + 2], size = wisps[i + 3], m = wisps[i + 4];
-    if (land) { ctx.globalAlpha = m; drawSoul(x, y, size, s, t, false); continue; } // fading in
+    if (land) { // forming: the soul under its lit outline, cooling into it (see FORM)
+      const fs = m, cooled = fillCooled(fs);
+      if (cooled > 0) { ctx.globalAlpha = cooled; drawSoul(x, y, size, s, t, false); ctx.globalAlpha = 1; }
+      if (cooled < 1) {
+        const k = s.tr.scale, S0 = size, R = headGlowR(S0, k) + (1.25 * S0 * k - headGlowR(S0, k)) * ease01(fs / FILL_SPREAD);
+        litOutline(x, y, size, s, t, x, y - LAND_MID * size, R, 1 - cooled, col);
+      }
+      continue;
+    }
     const fly = !noPreDraw && liftOffPicture(s, 0.9 * ppm(s.oz, s.oe)); // leaving: shrinking, from its picture
     if (!fly) { drawSoul(x, y, size, s, t, false); continue; }
     fly.seen = frameNo;
@@ -1694,7 +2115,7 @@ function draw() {
   nears.forEach(soul);
   if (leavers.length) drawLeavers(t, true);
   if (block) drawGhostFerry(t);
-  if (arrivals.length) streaks(arrivals, arrivalPos, 0.08, "190,240,255", arrivalWisp, t, true);
+  if (arrivals.length) { drawVortexes(); drawFarSwirls(); streaks(arrivals, arrivalPos, 0.08, "190,240,255", arrivalWisp, t, true); }
   if (flyers.length) streaks(flyers, flightPos, 0.05, "255,214,140", flightWisp, t);
   if (block && block.tally && !block.test) { ctx.globalAlpha = ferryAlpha(now); drawTally(); ctx.globalAlpha = 1; } // a test boat has nobody to count
   if (picked) showPicked(t);
@@ -1818,6 +2239,12 @@ function fillDetails() {
     rows.push(["Outputs", `${outs.length} · ${bch(total)} in all`]);
     rows.push(["", shown + (outs.length > 6 ? `, and ${outs.length - 6} more` : "")]);
   } else rows.push(["Outputs", "unknown: it was already waiting when the relay started"]);
+  const ins = tx.inputs || null;
+  if (ins) {
+    const total = ins.reduce((a, v) => a + v, 0), shown = [...ins].sort((a, b) => b - a).slice(0, 6).map(bch).join(", "); // largest first
+    rows.push(["Inputs", `${ins.length} · ${bch(total)} in all`]);
+    rows.push(["", shown + (ins.length > 6 ? `, and ${ins.length - 6} more` : "")]);
+  } else rows.push(["Inputs", outs ? "unknown" : "unknown: it was already waiting when the relay started"]);
   const carries = [];
   if (s.tr.donation) carries.push(`sparkler (a donation to this site: ${bch(s.tr.donation)})`);
   if (tx.nft) carries.push("certificate (a CashTokens NFT)");
@@ -1976,8 +2403,8 @@ if (studio) {
   }, 1000);
   ctl("burst").onclick = () => {
     for (let i = 0; i < 500; i++) {
-      const tx = madeUpTx();
-      tx.txid = `synthetic-burst-${nextId}-${i}`; tx.fee = Math.round(randomFee() * tx.size);
+      const tx = madeUpTx(randomFee());
+      tx.txid = `synthetic-burst-${nextId}-${i}`;
       if (synthetic) { addSoul(tx.fee / tx.size, 0, tx); sonifier.event(tx); }
       else { sonifier.event(tx); liveFeed.event(tx); }
     }
@@ -2012,7 +2439,120 @@ const skyBottom = (x0, x1) => {
   return r.top + y;
 };
 setupDonate(document.getElementById("donate"), document.getElementById("give"), skyBottom);
-setupAbout(document.getElementById("about"), document.getElementById("aboutDialog"));
+// The About window's pictures, drawn with the scene's own drawing (so they look just like it): each
+// <canvas data-fig="…"> in it, drawn when it opens (and again if the window is resized while it's open).
+const aboutSoul = (tx, rate, id) => ({ id, fee: rate, tx, tr: txTraits(tx, rate) });
+const aboutTx = (outs, more = {}) => ({ outputs: Array.from({ length: outs }, () => 100000), size: TYPICAL_BYTES, ...more });
+function aboutBackdrop(w, h, horizon) { // the night: sky, and the beach from the horizon down
+  const sky = ctx.createLinearGradient(0, 0, 0, h * horizon);
+  sky.addColorStop(0, "#0a1230"); sky.addColorStop(1, "#1c2650");
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, w, h * horizon);
+  const gr = ctx.createLinearGradient(0, h * horizon, 0, h);
+  gr.addColorStop(0, "#3a3430"); gr.addColorStop(1, "#272320");
+  ctx.fillStyle = gr; ctx.fillRect(0, h * horizon, w, h - h * horizon);
+}
+// souls standing in a row: [tx, rate] each, at size S, their feet (tail tips) at y
+function aboutRow(w, h, S, y, souls, t = 0) {
+  aboutBackdrop(w, h, 0.42);
+  souls.forEach(([tx, rate], i) => drawSoul(((i + 0.5) * w) / souls.length + 0.1 * S, y, S, aboutSoul(tx, rate, 7 + i * 13), t, false));
+}
+// the first picture's fee rate at t seconds: 1 sat/byte to 512 and back, every doubling taking as long, over 8 s
+const aboutFee = (t) => Math.pow(2, 9 * (0.5 - 0.5 * Math.cos((2 * Math.PI * t) / 8)));
+// the arrival of a soul with these inputs, frozen at u (0..1 of its fall), seen from in front and a little above
+function aboutArrival(w, h, ins, id, u) {
+  aboutBackdrop(w, h, 0.62);
+  const S0 = Math.min(56, w * 0.42), ppm = S0 / 0.9, col = "190,240,255", k = 1;
+  const chest = { x: w / 2, y: h - 26 - LAND_MID * S0 }, top = -24;
+  const axis = (uu, lean) => { const left = Math.pow(1 - clamp(uu, 0, 1), lean); return { x: chest.x + 10 * left, y: chest.y + (top - chest.y) * left }; };
+  ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "butt";
+  { // (one input: just its centre's light and trail, as in the scene)
+    const stars = vortexStars(ins, id), v = Math.min(1, u / VORTEX_MEET);
+    vortexReady(stars, v);
+    // (scaled to fit: the farthest any light is out from the centre over the time its trail shows, in the picture's
+    // half-width, with room for its glow)
+    let reach = 0.3;
+    for (const st of stars) if (!st.big) for (let j = 0; j <= 8; j++) {
+      const vv = Math.min(1, Math.max(0, u - VORTEX_TRAIL * (1 - j / 8)) / VORTEX_MEET);
+      if (!starGone(st, vv)) reach = Math.max(reach, Math.hypot(...starOffset(st, vv)));
+    }
+    const fit = Math.min(ppm, (w / 2 - 12) / reach);
+    const n1 = Math.max(1, stars.filter((st) => !st.big && !starGone(st, v)).length);
+    const crowd = Math.min(1, 3 / Math.sqrt(n1 * (1 + n1 * v * v))), N = 16;
+    const at = (st, uu) => { // like starPos, on the picture: depth shows as height and brightness
+      const [dx, dz] = starOffset(st, Math.min(1, uu / VORTEX_MEET)), c = axis(uu - u + 0.5, 1.5); // (now drawn where it would be half way down, whenever it's frozen)
+      return { x: c.x + dx * fit, y: c.y - dz * fit * 0.35, a: clamp(0.72 + (0.28 * dz) / 0.6, 0.45, 1) };
+    };
+    for (const st of stars) {
+      if (!st.big && starGone(st, v)) continue;
+      const hr = Math.max(0.8 / 0.55, (headCoreR(S0, k) * starHead(st, v)) / 5 / 0.55), keep = st.big ? 1 : crowd;
+      const sc = starColour(st, v);
+      let prev = null, p = null;
+      for (let j = 0; j <= N; j++) {
+        const uk = Math.max(0, u - VORTEX_TRAIL * (1 - j / N));
+        p = at(st, uk);
+        if (prev) {
+          const q = j / N; ctx.strokeStyle = `rgba(${sc},${0.6 * q * p.a * keep})`; ctx.lineWidth = Math.max(0.6, hr * 0.7 * q);
+          ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+        }
+        prev = p;
+      }
+      if (st.big) { arrivalHead(p.x, p.y, S0, k, 0, col); continue; }
+      const R = hr * 2.6, g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, R), ga = p.a * keep;
+      g.addColorStop(0, `rgba(${sc},${0.9 * ga})`); g.addColorStop(0.3, `rgba(${sc},${0.35 * ga})`); g.addColorStop(1, `rgba(${sc},0)`);
+      ctx.fillStyle = g; ctx.fillRect(p.x - R, p.y - R, 2 * R, 2 * R);
+      ctx.fillStyle = `rgba(${whiter(sc)},${p.a})`; ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.8, hr * 0.55), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+// some inputs for a picture: amounts spread over a few orders of magnitude, the same every time
+const aboutInputs = (n, id) => Array.from({ length: n }, (_, i) => Math.round(Math.exp(Math.log(2000) + 9 * hash(id * 31 + i, 12))));
+// the pictures' arrivals, by inputs: [the id that sets where its lights start, when to freeze it (u)], chosen (by
+// trying 400) to have its first merge late, and frozen before it: 3 inputs merge at v 1.0 (of the closing), 10 at
+// 0.43, 50 at 0.0625 (that many start close enough that some merge almost at once: the best of a few hundred thousand)
+const ABOUT_ARRIVALS = { 3: [9, 0.2], 10: [176, 0.22], 50: [382848, 0.0348] };
+const ABOUT_FIGS = {
+  spirit: (w, h, cv, t = 0) => aboutRow(w, h, 92, h - 32, [[aboutTx(1), aboutFee(t)]], t),
+  fees: (w, h) => { // the lanterns' colours, 1 to 512 sat/byte (every doubling the same width)
+    for (let x = 0; x < w; x++) { ctx.fillStyle = `rgb(${lampColor(Math.pow(2, (9 * (x + 0.5)) / w))})`; ctx.fillRect(x, 0, 1.5, h); }
+  },
+  bags: (w, h) => aboutRow(w, h, 66, h - 26, [[aboutTx(2), 1]]),
+  dolly: (w, h) => aboutRow(w, h, 66, h - 26, [[aboutTx(3), 1]]),
+  stack: (w, h) => aboutRow(w, h, 66, h - 26, [[aboutTx(41), 1]]), // a great many: the stack goes up out of the picture
+  inputs: (w, h, cv) => { // each frozen before any of its lights have merged, so it shows as many as its label says
+    const n = +cv.dataset.n, [id, u] = ABOUT_ARRIVALS[n] || [n, 0.2];
+    aboutArrival(w, h, aboutInputs(n, n), id, u);
+  },
+  tokens: (w, h) => aboutRow(w, h, 88, h - 30, [[aboutTx(1, { nft: true }), 1], [aboutTx(1, { ft: true }), 1]]),
+};
+function drawAboutFigure(cv, t = 0) {
+  const w = cv.clientWidth, h = cv.clientHeight, main = ctx;
+  if (!w || !h) return;
+  if (cv.width !== Math.round(w * DPR) || cv.height !== Math.round(h * DPR)) { cv.width = Math.round(w * DPR); cv.height = Math.round(h * DPR); }
+  ctx = cv.getContext("2d"); ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  try { ABOUT_FIGS[cv.dataset.fig](w, h, cv, t); } finally { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx = main; }
+}
+let aboutLoop = 0;
+function drawAboutFigures(dialog) {
+  for (const cv of dialog.querySelectorAll("canvas[data-fig]")) drawAboutFigure(cv);
+  const live = dialog.querySelector('canvas[data-fig="spirit"]'), t0 = performance.now();
+  if (!live || aboutLoop) return;
+  const step = (ms) => { // the first picture lives (its lantern's colour, and its sway) while the window is open
+    if (!dialog.open) { aboutLoop = 0; return; }
+    drawAboutFigure(live, (ms - t0) / 1000);
+    aboutLoop = requestAnimationFrame(step);
+  };
+  aboutLoop = requestAnimationFrame(step);
+}
+{
+  // (drawn here, after setupAbout's own click handler has opened it, so a browser still holding an older about.js
+  // draws them too)
+  const dialog = document.getElementById("aboutDialog"), button = document.getElementById("about");
+  setupAbout(button, dialog);
+  button.addEventListener("click", () => drawAboutFigures(dialog));
+  if (dialog.open) drawAboutFigures(dialog); // (opened by a link to #about)
+  addEventListener("resize", () => { if (dialog.open) drawAboutFigures(dialog); });
+}
 new ResizeObserver(resize).observe(cv);
 resize();
 // #shot=12.5 freezes the made-up traffic that many seconds in (for checking a moment); &add=3 drops 1,000 souls at 3 s;
