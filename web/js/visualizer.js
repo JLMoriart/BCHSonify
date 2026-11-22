@@ -37,6 +37,11 @@ const LANE_CLEAR = 1.4, LANE_MIN_GAP = 1.4; // lanes sit far enough apart that s
 const ARC_REACH = 40;              // metres: flights to the ferry arc higher from farther off, levelling out around here
 // The pier runs from PIER_FRONT out in the water to PIER_END on the beach; the line starts at PIER_START.
 const DECK = 0.55, SHORE = 10.5, PIER_FRONT = 7.6, PIER_START = 7.9, PIER_END = 12.5, SPACING = 1.15;
+// The line weaves down the pier in one S (right, then left), so the souls there hide each other less: how far
+// it swings (metres), and its middle, a little left of the pier's. A soul's body reaches about 0.34 m to each
+// side, its lantern 0.46 m to the right; the rails' inner faces are 1.24 m from the middle: so the lanterns on
+// the right and the bodies on the left come about as close to the rails.
+const PIER_WEAVE = 0.85, PIER_MID = -0.05;
 const FIRST_LANE = 16;             // metres: the first lane across the sand
 // how strongly a lantern colours its soul, the same at every distance: close up, a glow on the side toward it
 // this strong at its brightest; mid-distance and far souls are too small for a glow, so they are tinted all over
@@ -120,7 +125,7 @@ function hash(id, salt) {
 // ---- the line: down the pier, onto the beach, then switchbacks to the horizon ----
 function buildPath() {
   const pts = [];
-  for (let z = PIER_START; z <= PIER_END; z += 0.4) pts.push([0.55 * Math.sin((z - PIER_START) * 0.9), z]);
+  for (let z = PIER_START; z <= PIER_END; z += 0.4) pts.push([PIER_MID + PIER_WEAVE * Math.sin((2 * Math.PI * (z - PIER_START)) / (PIER_END - PIER_START)), z]);
   pts.push([0, PIER_END + 1.2], [0, FIRST_LANE]);
   const half = (z) => (W * 0.45) / ppm(z); // every lane spans ~90% of the screen width
   let z = FIRST_LANE, dir = 1;
@@ -643,6 +648,7 @@ const SPARK_TIP = [0.52, -0.95];
 // short streak behind it (its motion), thinning and dimming as it dies. Spark k of a soul relaunches every
 // cycle in a new direction (from a hash), so the sparks move smoothly rather than flickering.
 const SPARK_DROOP = 1.2; // soul heights per s², the pull down on a spark
+const SPARK_REACH = 1.5; // how far sparks fly before they burn out (1: 0.12..0.34 soul heights), in the same time
 // the glow around a sparkler: [distance out (of its radius), opacity], a bell curve easing to nothing at the edge
 const SPARK_GLOW = Array.from({ length: 11 }, (_, i) => { const u = i / 10; return [u, +(0.6 * Math.exp(-5 * u * u) * (1 - u * u)).toFixed(3)]; });
 function drawSparkler(tr, id, t, B) {
@@ -658,7 +664,7 @@ function drawSparkler(tr, id, t, B) {
     const seed = id * 131 + k, life = 0.22 + 0.2 * hash(seed, 1), cycle = life + 0.04 + 0.12 * hash(seed, 2);
     const run = t + cycle * hash(seed, 3), i = Math.floor(run / cycle), age = run - i * cycle;
     if (age >= life) continue; // between sparks
-    const h = hash(seed, 100 + i), a = h * Math.PI * 2, reach = 0.12 + 0.22 * hash(seed, 200 + i);
+    const h = hash(seed, 100 + i), a = h * Math.PI * 2, reach = SPARK_REACH * (0.12 + 0.22 * hash(seed, 200 + i)); // soul heights
     const at = (u) => { // where it is, u seconds into its flight: flying out, slowing, drooping
       const f = u / life, d = reach * f * (2 - f);
       return [tx + Math.cos(a) * d, ty + Math.sin(a) * d + SPARK_DROOP * u * u];
