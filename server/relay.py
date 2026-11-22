@@ -4,12 +4,14 @@
 Sends raw events only; all sonification and visualization logic lives in the
 browser.
 
-  {"type": "tx", "t": <unix s>, "txid": "...", "outputs": [sats, ...], "size": bytes,
+  {"type": "tx", "t": <unix s>, "txid": "...", "outputs": [sats, ...], "inputs": [sats, ...], "size": bytes,
    "fee": sats, "nft": true, "ft": true, "memo": true, "donation": sats, "confirmed": true}
   {"type": "block", "t": <unix s>, "hash": "...", "size": bytes, "limit": bytes,
    "txids": [...], "dropped": [...]}
 
-tx: "fee" is missing when the node couldn't be asked. "nft" / "ft" / "memo"
+tx: "fee" is missing when the node couldn't be asked. "inputs" is what each input spends, in order, looked up
+in the node (`getrawtransaction <txid> 2`); it's missing when that failed or ran out of time (a huge burst),
+and for transactions that arrived already confirmed. "nft" / "ft" / "memo"
 appear only when true: an output holds a CashTokens NFT, holds fungible
 CashTokens, or is an OP_RETURN. "donation" (with --donate) is how many sats it
 pays to the site's donation address, when that is any. "confirmed" appears (true) when the transaction
@@ -37,7 +39,7 @@ The node publishes each transaction twice: when it enters the mempool, and
 again when a block includes it. Only the first counts.
 
 Node lookups go through --cli (a bitcoin-cli command prefix): getrawmempool
-true, getrawmempool, getblock <hash> 1. Without --cli there are no fees, block
+true, getrawmempool, getblock <hash> 1, getrawtransaction <txid> 2. Without --cli there are no fees, block
 sizes or block contents, and "mempool" stays empty.
 
 With --xpub, the relay also runs the music shop (shop.py): orders paid to addresses from that wallet key,
@@ -60,6 +62,8 @@ import zmq.asyncio
 
 MEMPOOL_HELLO = 20000  # most waiting transactions sent to a new client
 SLOW_LOOKUP = 0.5      # s; after a mempool lookup slower than this (a huge mempool), rest twice as long as it took
+INPUT_LOOKUPS = 8      # input lookups (getrawtransaction <txid> 2) running at once
+INPUT_BUDGET = 3.0     # s; a burst's input lookups not started by then are skipped (its transactions go without)
 
 
 def _varint(b, i):
@@ -229,6 +233,8 @@ class Relay:
             took = time.monotonic() - start
             if took > SLOW_LOOKUP:
                 self.rest_until = time.monotonic() + 2 * took
+        if mempool is not None:
+            await self.inputs([ev for ev in evs if ev["txid"] in mempool])
         for ev in evs:
             entry = mempool.get(ev["txid"]) if mempool is not None else None
             if entry:
@@ -238,6 +244,26 @@ class Relay:
             elif self.cli:  # without a node to ask, nothing would ever clear them
                 self.pending[ev["txid"]] = ev
             self.publish(ev)
+
+    async def inputs(self, evs):
+        """Add "inputs" (sats spent by each input) to these waiting transactions, a few lookups at a time."""
+        sem, deadline, failed = asyncio.Semaphore(INPUT_LOOKUPS), time.monotonic() + INPUT_BUDGET, 0
+
+        async def look(ev):
+            nonlocal failed
+            async with sem:
+                if time.monotonic() > deadline:
+                    failed += 1
+                    return
+                try:
+                    tx = await self.rpc("getrawtransaction", ev["txid"], "2", timeout=5)
+                    ev["inputs"] = [round(v["value"] * 1e8) for v in tx["vin"]]
+                except Exception:  # noqa: BLE001 -- e.g. mined meanwhile; it goes without
+                    failed += 1
+
+        await asyncio.gather(*(look(ev) for ev in evs))
+        if failed:
+            print(f"{failed} of {len(evs)} txs: no inputs", flush=True)
 
     async def block(self, ev):
         """Publish a block: its size and limit, which waiting transactions it took, and which just left."""
@@ -328,7 +354,7 @@ async def main():
     p.add_argument("--history", type=float, default=1200,
                    help="seconds of events sent to new clients; keep >= the longest note hold (default 1200)")
     p.add_argument("--cli", help="bitcoin-cli command prefix, e.g. 'sudo -n -u bitcoin bitcoin-cli -conf=...'; "
-                                 "used for getrawmempool [true] and getblock <hash> 1")
+                                 "used for getrawmempool [true], getblock <hash> 1 and getrawtransaction <txid> 2")
     p.add_argument("--donate", help="the site's donation CashAddress: transactions paying it are marked \"donation\"")
     p.add_argument("--xpub", help="run the music shop: the sales wallet's account extended public key")
     p.add_argument("--shop-catalog", default="/var/www/bchsonify/music.json", help="the shop's track list and price")

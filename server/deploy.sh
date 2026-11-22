@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Install or update the relay on the server (idempotent).
-#   - system user `bchsonify`, allowed via sudoers to run three read-only
-#     bitcoin-cli commands as `bitcoin`: getrawmempool, getrawmempool true
-#     (waiting transactions and their fees) and getblock (a block's size, size
-#     limit and transaction ids)
+#   - system user `bchsonify`, allowed via sudoers to run read-only bitcoin-cli
+#     commands as `bitcoin`: getrawmempool, getrawmempool true (waiting
+#     transactions and their fees), getblock (a block's size, size limit and
+#     transaction ids), getrawtransaction <txid> 2 (what each input spends) and
+#     scantxoutset (the shop's catch-up)
 #   - /opt/bchsonify/relay.py + systemd bchsonify-relay.service
 #   - listens on 127.0.0.1:8765 only (not reachable from outside)
 #   - watches for donations to web/donate.json's address (--donate), when it has one
@@ -32,6 +33,7 @@ bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bit
 bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getrawmempool true
 bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getblock *
 bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn scantxoutset start *
+bchsonify ALL=(bitcoin) NOPASSWD: /usr/local/bin/bitcoin-cli -conf=/etc/bchn/bitcoin.conf -datadir=/var/lib/bchn getrawtransaction * 2
 EOF
 visudo -cf /tmp/bchsonify.sudoers >/dev/null
 install -m 440 /tmp/bchsonify.sudoers /etc/sudoers.d/bchsonify
