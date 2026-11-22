@@ -504,11 +504,13 @@ function poolSprite(lamp) {
   }
   return c;
 }
-function drawPools(list) {
+// fade: how much of each soul's pool (a soul forming as it arrives: as much as of its lantern, see fillCooled)
+function drawPools(list, fade = null) {
   ctx.globalCompositeOperation = "lighter";
   for (const s of list) {
     standAt(s);
-    const x = gx + 0.4, e = ground(gz), D = depth(gz, e), w = (f * POOL_R) / D, a = smooth(((0.9 * f) / D - 6) / (POOL_FULL - 6));
+    const x = gx + 0.4, e = ground(gz), D = depth(gz, e), w = (f * POOL_R) / D;
+    const a = smooth(((0.9 * f) / D - 6) / (POOL_FULL - 6)) * (fade ? fade(s) : 1);
     if (a < 0.02) continue;
     const y1 = Y(gz - POOL_R, e), y2 = Y(gz + POOL_R, e);
     ctx.globalAlpha = POOL_ALPHA * a;
@@ -1316,7 +1318,8 @@ function step(dt) {
 function arrivalPos(s, u) {
   standAt(s);
   // top: just above the frame. Every soul falls alike (evenly enough that a vortex's turns show).
-  const left = Math.pow(1 - u, 1.5), stand = ground(gz) + 0.2, top = aboveFrame(gz, 40);
+  // (it lands floating up and down just as the souls in line do, so it doesn't jump when it joins them)
+  const left = Math.pow(1 - u, 1.5), stand = ground(gz) + 0.2 + 0.05 * Math.sin(now * 1.7 + s.id * 1.3), top = aboveFrame(gz, 40);
   wx = gx + s.dx * gz * left; wz = gz; we = stand + (top - stand) * left;
 }
 // where a soul is partway through its flight to the ferry's lantern -> wx, wz, we
@@ -2077,6 +2080,7 @@ function drawLyric() {
   ctx.restore();
 }
 
+const formingMid = [], formingNear = [], formingPool = (s) => fillCooled(s.f * FORM); // as the soul itself fades in
 function draw() {
   const t = reduce ? 20 : now;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -2095,10 +2099,13 @@ function draw() {
     if (gz >= farZ) continue;
     (gz >= PIER_END + 0.3 ? mids : nears).push(s);
   }
+  formingMid.length = formingNear.length = 0; // souls forming as they arrive: their pools, fading in (see formingPool)
+  for (const s of arrivals) if (s.f > 0) { standAt(s); if (gz < farZ) (gz >= PIER_END + 0.3 ? formingMid : formingNear).push(s); }
   // the middle distance's pools: hundreds of glows, so painted into their own layer only when souls have moved
   // (whenever the far souls are), and that added on; adding light is adding light, so it's the same picture
   if (farDirty) { const main = ctx; ctx = poolCtx; ctx.clearRect(0, 0, W, H); drawPools(mids); ctx = main; }
   ctx.globalCompositeOperation = "lighter"; ctx.drawImage(poolCv, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
+  if (formingMid.length) drawPools(formingMid, formingPool); // (onto the scene, not the layer: they change every frame)
   if (farDirty) { drawFar(n); farDirty = !!block; } // called souls pulse, so keep redrawing during a block
   ctx.drawImage(farCv, 0, 0, W, H); // far souls: painted, like the nearer ones
   const soul = (s) => {
@@ -2112,6 +2119,7 @@ function draw() {
   if (leavers.length) drawLeavers(t, false);
   ctx.drawImage(pier, 0, 0, W, H);
   drawPools(nears);
+  if (formingNear.length) drawPools(formingNear, formingPool);
   nears.forEach(soul);
   if (leavers.length) drawLeavers(t, true);
   if (block) drawGhostFerry(t);
