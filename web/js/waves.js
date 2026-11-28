@@ -1,7 +1,8 @@
 // Ocean waves from filtered noise, all native Web Audio nodes.
 //
-// Each wave is four layers on one stereo position, scheduled once (no JS per
-// audio frame), and its nodes exist only while it sounds:
+// Each wave is four layers of mono noise on one stereo position, scheduled once
+// (no JS per audio frame); each layer's nodes run only while it can be heard
+// (until it has faded LAYER_FADE_DB), and the wave's exist only while it sounds:
 //
 //   approach  brown noise, low-pass opening      swell rising toward the break (rumble -> rush)
 //   crash     pink noise, low-pass bright->dark   the break (rise of breakAttack), then the wash
@@ -15,8 +16,8 @@
 // Far waves (down the beach) and further waves are the main waves again, as
 // extra streams: identical settings, except their own level and interval
 // (x main), and each wave through a 24 dB/octave low-pass at a random cutoff
-// between the stream's low-pass lower and upper limits. Same distance, level
-// and reverb after that.
+// between the stream's low-pass lower and upper limits, and without the foam
+// fizz. Same distance, level and reverb after that.
 //
 // Timing: waves every waveInterval s (+- waveIrregularity), each a random size
 // (up to waveSizeVariation dB smaller, and darker when smaller); every
@@ -94,22 +95,35 @@ export const WAVE_PARAMS = [
 const NOISE_SECONDS = 6;
 const noiseCache = new WeakMap();
 
-/** Stereo white, pink and brown noise buffers, each normalized to the same RMS. */
+/** Mono white, pink and brown noise buffers for the waves, each normalized to
+ *  the same RMS, and a stereo brown one for the surf bed (wide, and only one of
+ *  it). Mono halves the work of every wave's filters; each wave's panner puts it
+ *  in place. A mono source panned to the middle comes out of each side 3 dB
+ *  down, where a stereo one passed through as it was, so the mono buffers are
+ *  3 dB up to sound as loud as the stereo ones did. */
 function noises(ctx) {
   let n = noiseCache.get(ctx);
   if (n) return n;
   const len = NOISE_SECONDS * ctx.sampleRate;
-  const make = (fill) => {
-    const b = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
+  const make = (fill, channels = 1) => {
+    const b = ctx.createBuffer(channels, len, ctx.sampleRate);
+    for (let ch = 0; ch < channels; ch++) {
       const d = b.getChannelData(ch);
       fill(d);
       let e = 0;
       for (let i = 0; i < len; i++) e += d[i] * d[i];
-      const k = 0.25 / Math.sqrt(e / len);
+      const k = (channels === 1 ? 0.25 * Math.SQRT2 : 0.25) / Math.sqrt(e / len);
       for (let i = 0; i < len; i++) d[i] *= k;
     }
     return b;
+  };
+  const brown = (d) => {
+    // leaky integrator of white noise: flat below ~150 Hz, -6 dB/octave above.
+    // (A 0.998 leak put the corner at ~15 Hz: nearly all the energy was
+    // subsonic and the swell and bed were inaudible.)
+    const leak = Math.exp(-2 * Math.PI * 150 / ctx.sampleRate);
+    let y = 0;
+    for (let i = 0; i < d.length; i++) { y = leak * y + (Math.random() * 2 - 1); d[i] = y; }
   };
   n = {
     white: make((d) => { for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; }),
@@ -122,14 +136,8 @@ function noises(ctx) {
         d[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362; b6 = w * 0.115926;
       }
     }),
-    brown: make((d) => {
-      // leaky integrator of white noise: flat below ~150 Hz, -6 dB/octave above.
-      // (A 0.998 leak put the corner at ~15 Hz: nearly all the energy was
-      // subsonic and the swell and bed were inaudible.)
-      const leak = Math.exp(-2 * Math.PI * 150 / ctx.sampleRate);
-      let y = 0;
-      for (let i = 0; i < d.length; i++) { y = leak * y + (Math.random() * 2 - 1); d[i] = y; }
-    }),
+    brown: make(brown),
+    bedBrown: make(brown, 2),
   };
   noiseCache.set(ctx, n);
   return n;
@@ -148,6 +156,12 @@ function wanderBuffer(ctx) {
 
 const distanceCutoff = (d) => 16000 * Math.pow(800 / 16000, d); // 16 kHz near .. 800 Hz far
 const distanceDb = (d) => -12 * d;
+// A layer stops once its fade is this far down (it's then far below everything else; the waves are quiet anyway):
+// FADE_TCS time constants of its exponential fade.
+const LAYER_FADE_DB = 50, FADE_TCS = (LAYER_FADE_DB / 20) * Math.LN10;
+// A filter's frequency glides: worked out once per 128-sample block (2.7 ms) instead of every sample, which is
+// far less work and sounds the same for glides lasting seconds. (Where a browser can't, it stays per sample.)
+const kRate = (filter) => { try { filter.frequency.automationRate = "k-rate"; } catch {} };
 const isOff = (p) => p.wavesLevel <= -59.5; // off: no waves scheduled, bed silent
 const levelGain = (p) => (isOff(p) ? 0 : dbToAmp(p.wavesLevel + distanceDb(p.waveDistance)));
 const distantOff = (p, x) => p[`${x}On`] === false || p[`${x}Level`] <= -59.5;
@@ -185,7 +199,7 @@ export class Waves {
     this.level.connect(this.send).connect(reverbIn);
 
     // distant surf bed: constant, with a slow random swell (+-50%)
-    this.bed = new AudioBufferSourceNode(ctx, { buffer: this.noise.brown, loop: true });
+    this.bed = new AudioBufferSourceNode(ctx, { buffer: this.noise.bedBrown, loop: true });
     this.bedFilter = new BiquadFilterNode(ctx, { type: "lowpass", frequency: p.bedCutoff, Q: 0.5 });
     this.bedGain = new GainNode(ctx, { gain: dbToAmp(p.bedLevel) });
     this.bedSwell = new AudioBufferSourceNode(ctx, { buffer: wanderBuffer(ctx), loop: true, playbackRate: 0.12 });
@@ -252,25 +266,31 @@ export class Waves {
     const sizeDb = -Math.random() * pr.sizeVariation + (inSet ? pr.setBoost : 0);
     const size = dbToAmp(sizeDb), dark = Math.pow(2, sizeDb / 12); // smaller waves are also darker
     const tb = t0 + pr.swellTime;                                    // the break
-    const end = tb + Math.max(pr.washTime * 1.6, pr.washTime * 0.5 + pr.backwashTime * 2) + 1;
+    const end = tb + Math.max(pr.washTime * 1.6, pr.washTime * 0.5 + pr.backwashTime * 2) + 1; // (at the latest)
     const pan = new StereoPannerNode(ctx, { pan: (Math.random() * 2 - 1) * pr.panSpread });
     const sources = [], nodes = [pan];
+    pan.connect(st.out);
+    let into = pan; // where the layers go: the panner, or for a distant wave its low-pass first (still mono there)
     if (pr.lowpass) {
       // distant waves: 24 dB/octave low-pass (two Butterworth sections) at this wave's cutoff
       const lp1 = new BiquadFilterNode(ctx, { type: "lowpass", frequency: pr.lowpass, Q: 0.541 });
       const lp2 = new BiquadFilterNode(ctx, { type: "lowpass", frequency: pr.lowpass, Q: 1.307 });
-      pan.connect(lp1).connect(lp2).connect(st.out);
+      lp1.connect(lp2).connect(pan);
       nodes.push(lp1, lp2);
-    } else {
-      pan.connect(st.out);
+      into = lp1;
     }
     const on = (db) => db > -39.5; // a layer at its minimum isn't created at all
-    const layer = (buffer, filter, gainParam) => {
+    let last = t0; // when the last layer stops
+    // a layer: noise through its filter and gain, playing from `from` until its fade (from `fading`, with time
+    // constant tc) is LAYER_FADE_DB down, or the wave's end
+    const layer = (buffer, filter, from, fading, tc, gainParam) => {
       const src = new AudioBufferSourceNode(ctx, { buffer, loop: true });
-      const g = new GainNode(ctx, { gain: 0 });
-      src.connect(filter).connect(g).connect(pan);
-      src.start(t0, Math.random() * NOISE_SECONDS);
-      src.stop(end);
+      const g = new GainNode(ctx, { gain: 0 }), to = Math.min(end, fading + FADE_TCS * tc);
+      kRate(filter);
+      src.connect(filter).connect(g).connect(into);
+      src.start(from, Math.random() * NOISE_SECONDS);
+      src.stop(to);
+      last = Math.max(last, to);
       sources.push(src);
       nodes.push(filter, g);
       gainParam(g.gain);
@@ -279,7 +299,7 @@ export class Waves {
 
     // approach: rumble rising to the break, then sinking under the crash
     if (on(pr.swellLevel)) {
-      const ap = layer(n.brown, new BiquadFilterNode(ctx, { type: "lowpass", frequency: 250, Q: 0.7 }), (g) => {
+      const ap = layer(n.brown, new BiquadFilterNode(ctx, { type: "lowpass", frequency: 250, Q: 0.7 }), t0, tb + 0.1, 0.6, (g) => {
         const peak = dbToAmp(pr.swellLevel) * size;
         g.setValueAtTime(0, t0);
         g.linearRampToValueAtTime(peak * 0.3, t0 + pr.swellTime * 0.6);
@@ -292,7 +312,8 @@ export class Waves {
 
     // crash: the break rises over breakAttack, then washes out (bright -> dark)
     if (on(pr.crashLevel)) {
-      const cr = layer(n.pink, new BiquadFilterNode(ctx, { type: "lowpass", frequency: pr.crashBrightness * dark, Q: 0.5 }), (g) => {
+      const cr = layer(n.pink, new BiquadFilterNode(ctx, { type: "lowpass", frequency: pr.crashBrightness * dark, Q: 0.5 }),
+        tb - pr.breakAttack * 0.3, tb + pr.breakAttack * 0.7, pr.washTime / 3.5, (g) => {
         const peak = dbToAmp(pr.crashLevel) * size;
         g.setValueAtTime(0, tb - pr.breakAttack * 0.3);
         g.linearRampToValueAtTime(peak, tb + pr.breakAttack * 0.7);
@@ -302,9 +323,11 @@ export class Waves {
       cr.frequency.setTargetAtTime(pr.washBrightness * dark, tb + pr.breakAttack, pr.washDarkening / 3);
     }
 
-    // fizz: foam hiss, rising just after the crash and lingering longest
-    if (on(pr.fizzLevel)) {
-      layer(n.white, new BiquadFilterNode(ctx, { type: "highpass", frequency: pr.fizzFreq, Q: 0.5 }), (g) => {
+    // fizz: foam hiss, rising just after the crash and lingering longest. The main waves only: from far off
+    // (the far and further waves) the foam isn't heard.
+    if (on(pr.fizzLevel) && !pr.lowpass) {
+      layer(n.white, new BiquadFilterNode(ctx, { type: "highpass", frequency: pr.fizzFreq, Q: 0.5 }),
+        tb, tb + pr.breakAttack + 0.4, pr.washTime / 2.5, (g) => {
         const peak = dbToAmp(pr.fizzLevel) * size;
         g.setValueAtTime(0, tb);
         g.linearRampToValueAtTime(peak, tb + pr.breakAttack + 0.4);
@@ -315,7 +338,8 @@ export class Waves {
     // backwash: the water retreating, a hiss sliding down
     if (on(pr.backwashLevel)) {
       const bwStart = tb + pr.washTime * 0.5;
-      const bw = layer(n.pink, new BiquadFilterNode(ctx, { type: "bandpass", frequency: 2600, Q: 0.8 }), (g) => {
+      const bw = layer(n.pink, new BiquadFilterNode(ctx, { type: "bandpass", frequency: 2600, Q: 0.8 }),
+        bwStart, bwStart + pr.backwashTime * 0.4, pr.backwashTime / 3, (g) => {
         const peak = dbToAmp(pr.backwashLevel) * size;
         g.setValueAtTime(0, bwStart);
         g.linearRampToValueAtTime(peak, bwStart + pr.backwashTime * 0.4);
@@ -326,8 +350,9 @@ export class Waves {
     }
 
     if (!sources.length) { nodes.forEach((x) => x.disconnect()); return; }
-    sources[0].onended = () => nodes.forEach((x) => x.disconnect());
-    this.waves.push({ stream: st, t0, end, sources, nodes });
+    let playing = sources.length; // the wave's nodes go once its last layer has stopped
+    for (const src of sources) src.onended = () => { if (--playing === 0) nodes.forEach((x) => x.disconnect()); };
+    this.waves.push({ stream: st, t0, end: last, sources, nodes });
   }
 
   update(p) {
