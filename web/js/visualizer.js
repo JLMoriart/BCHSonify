@@ -68,6 +68,9 @@ const FERRY_FADE = 1.2, FERRY_OUT = 2.2;
 const SHIMMER = 7; // px, how far the ghost ferry's rows sway, at the start of its fade
 const BOW_LAMP = [3.55, 0, 2.65];   // the great lantern that takes in the souls: metres ahead of the boat's middle, aside, up
 const CALL_AT = 1.6, CALL_SPREAD = 1.1; // first soul leaves this long after the block; the rest follow over this long
+// Souls called from past the horizon (the line goes on back there) come over it at this many a second, from when
+// the call reaches the end of the line that's in view, each rising from somewhere along the farthest lane
+const HORIZON_RATE = 6000;
 const START_SOULS = 2500, ARRIVALS_PER_S = 4, FIRST_BLOCK = 8, BLOCK_EVERY = 45; // made-up traffic (?source=synthetic)
 // stress test (?source=stress): made-up blocks this often, each filled to the block size limit in fee order;
 // transactions arrive at STRESS_FILL times the bytes a full block holds per interval, so every block is full and
@@ -90,6 +93,10 @@ const shotLyric = /lyric=([^&]+)/.exec(location.hash); // test: this line of lyr
 const shotDonors = /donors/.test(location.hash);   // test: every made-up soul is a donor (sparklers everywhere)
 const shotWild = /wild(?:=(\w+))?/.exec(location.hash); // test: every made-up soul has strange inputs (#wild, or #wild=many|whale|any)
 const shotBoat = /boat=([\d.]+)/.exec(location.hash), shotFull = +(/full=([\d.]+)/.exec(location.hash) || [0, 0])[1]; // test: a test boat then, for a block this full
+const shotBig = /bigblock=(\d+)/.exec(location.hash); // test (made-up traffic): this many more souls standing from the start, and a block for the front this many of them 1 s in (as if 400 bytes each), and no other blocks
+const shotStanding = /standing=(\d+)/.exec(location.hash); // test (made-up traffic): this many more souls standing from the start
+const shotBurst = /burst=(\d+)/.exec(location.hash); // test (made-up traffic): this many transactions arriving at once, 1 s in
+let burstDone = false;
 const shotPick = /pick=(\d+)/.exec(location.hash); // test: open the details of the soul at this place in line (at once in a #shot, else after 1.5 s)
 const shot = /shot=([\d.]+)/.exec(location.hash), shotAdd = /add=([\d.]+)/.exec(location.hash), shotDrop = /drop=([\d.]+)/.exec(location.hash);
 const asked = new URLSearchParams(location.search).get("source");
@@ -98,6 +105,9 @@ const stress = source === "stress", synthetic = source === "synthetic" || stress
 let W = 0, H = 0, DPR = 1, yh = 0, cy = 0, f = 0, bg = null, pier = null, path = null;
 let landTop = null, skyClip = null; // the top of the land (y every 2 px from x = -4), and the sky above it as a clip path
 let slots = null, cap = 0, farZ = 0, farCv = null, farCtx = null, farDirty = true;
+// the far souls the ferry has called, gold, in a layer of their own: they pulse, and that's the whole layer added
+// fainter and brighter (goldCv's alpha), not the far line painted again every frame (17,000 points in a big block)
+let goldCv = null, goldCtx = null, goldCount = 0;
 let poolCv = null, poolCtx = null; // the middle distance's lantern light on the ground, repainted with the far souls
 let trailCv = null, trailCtx = null; // the light trails of souls flying to the ferry (see streaks)
 let lastText = "", frameNo = 0, frozen = false, glints = [];
@@ -1184,6 +1194,15 @@ function mineBlock() {
   return true;
 }
 
+// Test (#bigblock): a block for the front n waiting souls
+function mineFront(n) {
+  if (block) return false;
+  const chosen = line.filter((s) => s.st === 0).slice(0, n);
+  beginBlock(chosen, false, fullness(chosen.length * 400, 32e6));
+  sonifier.event({ type: "block", t: sonifier.serverNow(), hash: `synthetic-${nextId}`, size: chosen.length * 400, limit: 32e6 });
+  return true;
+}
+
 // how full a block is, 0..1, as the sound has it: its block note's hold as a share of the longest
 const fullness = (size, limit) => blockHold({ size, limit }) / CONFIG.blockTarget;
 let nextFerry = 0;
@@ -1269,7 +1288,8 @@ function step(dt) {
   } else if (synthetic) {
     arrivalAcc += dt * ARRIVALS_PER_S;
     while (arrivalAcc >= 1) { arrivalAcc -= 1; addMadeUp(randomFee(), 0, true); }
-    if (now >= nextBlockAt && mineBlock()) nextBlockAt = now + BLOCK_EVERY;
+    if (shotBurst && !burstDone && now >= 1) { burstDone = true; burst(+shotBurst[1]); }
+    if (now >= nextBlockAt && (shotBig ? mineFront(+shotBig[1]) : mineBlock())) nextBlockAt = shotBig ? Infinity : now + BLOCK_EVERY;
   } else if (!block && blockQueue.length) { // one ferry at a time: each block waits its turn for the show (a
     // block seconds behind another gets its own ferry once the first has gone), but if more than SHOW_QUEUED
     // piled up (a tab in the background, say), the older ones are simply gone
@@ -1304,20 +1324,32 @@ function step(dt) {
   if (!b) return;
   b.flash *= Math.exp(-dt * 6);
   if (b.phase === "load") {
-    while (b.next < b.chosen.length && b.chosen[b.next].launch <= now) { // lift off from wherever it stands
-      const s = b.chosen[b.next++];
-      if (s.p >= cap) { s.st = 4; b.aboard++; continue; } // over the horizon: no flight to see, just aboard
-      standAt(s);
-      s.ox = gx; s.oz = gz; s.oe = ground(gz) + 0.3; s.launch = now; s.u = 0;
-      s.dur = 0.55 + 0.45 * clamp(Math.log(gz / 10) / Math.log(150), 0, 1) + 0.15 * rnd();
+    const fly = (s, x, z) => { // lift off from (x, z)
+      s.ox = x; s.oz = z; s.oe = ground(z) + 0.3; s.launch = now; s.u = 0;
+      s.dur = 0.55 + 0.45 * clamp(Math.log(z / 10) / Math.log(150), 0, 1) + 0.15 * rnd();
       s.k = 0.08 + 0.1 * hash(s.id, 8);
       s.st = 3; flyers.push(s); farDirty = true;
+    };
+    while (b.next < b.chosen.length && b.chosen[b.next].launch <= now) { // lift off from wherever it stands
+      const s = b.chosen[b.next++];
+      if (s.p >= cap) { // past the horizon: comes over it in its turn (see HORIZON_RATE)
+        if (!b.beyond) { b.beyond = []; b.beyondT = now; b.beyondNext = 0; }
+        b.beyond.push(s);
+        continue;
+      }
+      standAt(s); fly(s, gx, gz);
     }
-    for (let i = flyers.length - 1; i >= 0; i--) {
+    if (b.beyond) { // over the horizon, one after another, from along the farthest lane
+      const z = slots[cap * 2 - 1], half = (W * 0.45) / ppm(z);
+      while (b.beyondNext < b.beyond.length && b.beyondT + b.beyondNext / HORIZON_RATE <= now) fly(b.beyond[b.beyondNext++], (rnd() * 2 - 1) * half, z);
+    }
+    let w = 0; // (those aboard dropped in one pass: thousands land in a frame in a big block)
+    for (let i = 0; i < flyers.length; i++) {
       const s = flyers[i];
       s.u = (now - s.launch) / s.dur;
-      if (s.u >= 1) { s.st = 4; flyers.splice(i, 1); b.aboard++; b.flash = Math.min(1, b.flash + 0.25); }
+      if (s.u >= 1) { s.st = 4; b.aboard++; b.flash = Math.min(1, b.flash + 0.25); } else flyers[w++] = s;
     }
+    flyers.length = w;
     if (b.aboard === b.chosen.length && now >= b.t0 + FERRY_FADE + FERRY_STAY) { compact(); b.phase = "leave"; b.leaveT = now + 0.25; }
   } else if (now >= b.leaveT + leaveFor(b)) { if (!b.test) lastTook = b.chosen.length; block = null; }
 }
@@ -1695,12 +1727,32 @@ const flightWisp = (s) => (s.u < 0.35 ? 0.9 * ppm(s.oz, s.oe) * (1 - s.u / 0.35)
 const thin = [], thick = [], wisps = [];
 // Leaving souls (hundreds at once) are drawn into a layer of their own (trailCv) and that is added onto the
 // scene in one go: each shape added as light costs about as much as adding a whole layer, and there are four.
+// Their tails go in shapes of at most STREAK_BATCH each: in a big block they all converge on the lantern, and
+// one shape of thousands of overlapping strokes is far slower to fill than many small ones (Firefox: 10 fps
+// with 12,000 tails in one shape, 32-40 in shapes of 100). Not the heads: they're added as light, and each
+// shape added as light costs Firefox about a layer, so they stay one shape each.
+const STREAK_BATCH = 100;
+// ...and a head is a circle only where it's alone in its square (where its shape can be seen); in a crowd, a
+// little square, far quicker to fill, and the same once they overlap (Firefox, 17,000 souls in the air, 8,500
+// heads drawn: 42-54 fps all circles, 58-76 all squares)
+// ...and where they crowd (near the lantern, in a big block) only so many are drawn: the screen is cut into
+// CROWD_CELL px squares, and a flight whose head falls in a square that already has CROWD_MAX heads is left out.
+// It's solid light there anyway; elsewhere every flight is drawn.
+const CROWD_CELL = 6, CROWD_MAX = 3;
+let crowd = new Uint8Array(0), crowdCols = 0, flyCulled = 0;
+let flyCounts = ""; // (#fpslog: what the last frame's flights were drawn as)
 function streaks(list, pos, lag, col, wispSize, t, land = false) {
   thin.length = thick.length = wisps.length = 0;
   const main = ctx;
   if (!land) { ctx = trailCtx; ctx.clearRect(0, 0, W, H); }
   ctx.globalCompositeOperation = land ? "lighter" : "source-over"; ctx.lineCap = "round";
   ctx.strokeStyle = `rgba(${col},0.5)`; ctx.lineWidth = 1; ctx.beginPath();
+  if (!land) {
+    crowdCols = Math.ceil(W / CROWD_CELL);
+    const cells = crowdCols * Math.ceil(H / CROWD_CELL);
+    if (crowd.length !== cells) crowd = new Uint8Array(cells); else crowd.fill(0);
+    flyCulled = 0;
+  }
   for (const s of list) {
     if (s.u < 0 || (land && s.vortex && s.u < VORTEX_MEET)) continue; // a vortex: its stars until they meet
     let S0 = 0;
@@ -1710,21 +1762,40 @@ function streaks(list, pos, lag, col, wispSize, t, land = false) {
     pos(s, Math.max(0, s.u - (s.vortex ? 0 : lag))); project(wx, wz, we); // (a vortex: its biggest star's trail is its tail)
     const tx = sx, ty = sy - up; // (the tail lifted as much as its head: a soul's size doesn't change as it falls)
     sx = hx; sy = hy; sS = hS;
+    let cell = -1;
+    if (!land && sx >= 0 && sx < W && sy >= 0 && sy < H) { // in a crowd already: left out (see CROWD_MAX)
+      cell = ((sy / CROWD_CELL) | 0) * crowdCols + ((sx / CROWD_CELL) | 0);
+      if (crowd[cell] >= CROWD_MAX) { flyCulled++; continue; }
+      crowd[cell]++;
+    }
     const m = land ? landing(s) : 0, fs = land ? (s.f || 0) * FORM : 0; // m: the tail going; fs: seconds forming
-    if (sS >= 6) thick.push(tx, ty, sx, sy - up, m, sS, s.tr.scale, S0, fs); else { ctx.moveTo(tx, ty); ctx.lineTo(sx, sy - up); thin.push(sx, sy - up, sS); }
+    if (sS >= 6) thick.push(tx, ty, sx, sy - up, m, sS, s.tr.scale, land ? S0 : cell, fs); // (leaving: S0 unused; its crowd square)
+    else {
+      ctx.moveTo(tx, ty); ctx.lineTo(sx, sy - up); thin.push(sx, sy - up, sS);
+      if (thin.length % (3 * STREAK_BATCH) === 0) { ctx.stroke(); ctx.beginPath(); }
+    }
     const ws = wispSize(s);
     if (ws >= FAR_S) wisps.push(s, sx, sy, ws, land ? fs : m);
   }
   ctx.stroke();
+  if (!land) flyCounts = `thin ${thin.length / 3}, thick ${thick.length / 9}, pictures ${wisps.length / 5}, left out ${flyCulled}`;
   ctx.lineWidth = 1.7;
-  if (!land) { // leaving: every tail and every head alike, so all the tails as one shape and all the heads as another
+  if (!land) { // leaving: every tail and every head alike, so the tails in a few shapes and the heads as one
     ctx.beginPath();
-    for (let i = 0; i < thick.length; i += 9) { ctx.moveTo(thick[i], thick[i + 1]); ctx.lineTo(thick[i + 2], thick[i + 3]); }
+    for (let i = 0, k = 1; i < thick.length; i += 9, k++) {
+      ctx.moveTo(thick[i], thick[i + 1]); ctx.lineTo(thick[i + 2], thick[i + 3]);
+      if (k % STREAK_BATCH === 0) { ctx.stroke(); ctx.beginPath(); }
+    }
     ctx.stroke();
     ctx.globalCompositeOperation = "lighter"; // the heads add to their tails, as on the scene
     ctx.fillStyle = `rgb(${col})`; ctx.beginPath();
-    for (let i = 0; i < thick.length; i += 9) { ctx.moveTo(thick[i + 2] + 2.2, thick[i + 3]); ctx.arc(thick[i + 2], thick[i + 3], 2.2, 0, Math.PI * 2); }
+    let round = 0;
+    for (let i = 0; i < thick.length; i += 9) {
+      const x = thick[i + 2], y = thick[i + 3];
+      if (!(crowd[thick[i + 7]] > 1)) { ctx.moveTo(x + 2.2, y); ctx.arc(x, y, 2.2, 0, Math.PI * 2); round++; } else ctx.rect(x - 2, y - 2, 4, 4);
+    }
     ctx.fill();
+    flyCounts += `, round heads ${round}`;
   } else for (let i = 0; i < thick.length; i += 9) { // landing: one by one, each fades on its own as it lands
     const [ax, ay, hx, hy, m, , k, S0, fs] = thick.slice(i, i + 9);
     if (m < 1 && (ax !== hx || ay !== hy)) {
@@ -2010,7 +2081,7 @@ function drawTally() { // beside the lantern, on top of the flying souls
 
 // far souls live on their own layer, redrawn only when one of them moves, arrives or is called
 function drawFar(n) {
-  const g = farCtx, pulse = 0.75 + 0.25 * Math.sin(now * 9);
+  const g = farCtx;
   g.clearRect(0, 0, W, H);
   const gold = [];
   let colour = ""; // each far soul is a point of its body's colour in its lantern's light; neighbours mostly share one
@@ -2025,9 +2096,10 @@ function drawFar(n) {
     g.globalAlpha = sS < 0.6 ? 0.07 : sS < 1.2 ? 0.14 : sS < 2.5 ? 0.3 : 0.8; // dimmer when smaller than a pixel or so
     const w = Math.max(0.7, sS * 0.5), h = Math.max(0.7, sS * 0.75); g.fillRect(sx - w / 2, sy - sS * 0.65 - h / 2, w, h);
   }
-  g.fillStyle = "rgb(255,205,115)"; g.globalAlpha = pulse;
-  for (let i = 0; i < gold.length; i += 3) { const w = Math.max(1.6, gold[i + 2] * 0.8); g.fillRect(gold[i] - w / 2, gold[i + 1] - w / 2, w, w); }
   g.globalAlpha = 1;
+  goldCtx.clearRect(0, 0, W, H); goldCount = gold.length / 3;
+  goldCtx.fillStyle = "rgb(255,205,115)";
+  for (let i = 0; i < gold.length; i += 3) { const w = Math.max(1.6, gold[i + 2] * 0.8); goldCtx.fillRect(gold[i] - w / 2, gold[i + 1] - w / 2, w, w); }
 }
 
 // souls that left the mempool unmined: they rise and fade where they stood (near: those on the pier, else the rest)
@@ -2115,6 +2187,7 @@ function draw() {
   drawLyric();
   drawSurf(t);
   if (block) { ctx.globalAlpha = ferryAlpha(now); drawFerryWater(t); ctx.globalAlpha = 1; }
+  mark("sky+sea");
   const n = Math.min(line.length, cap); // anyone past the last place is over the horizon
   mids.length = nears.length = farArrivals.length = 0;
   for (const s of arrivals) s.placed = false;
@@ -2127,29 +2200,37 @@ function draw() {
     s.placed = true; // (an arriving one: drawn there)
   }
   for (const s of arrivals) if (!s.placed) farArrivals.push(s);
+  mark("sort");
   // the middle distance's pools: hundreds of glows, so painted into their own layer only when souls have moved
   // (whenever the far souls are), and that added on; adding light is adding light, so it's the same picture
   if (farDirty) { const main = ctx; ctx = poolCtx; ctx.clearRect(0, 0, W, H); drawPools(mids); ctx = main; }
   ctx.globalCompositeOperation = "lighter"; ctx.drawImage(poolCv, 0, 0, W, H); ctx.globalCompositeOperation = "source-over";
   drawPools(mids, true); // arriving souls' pools: onto the scene, not the layer, as they change every frame
-  if (farDirty) { drawFar(n); farDirty = !!block; } // called souls pulse, so keep redrawing during a block
+  mark("pools");
+  if (farDirty) { drawFar(n); farDirty = false; mark("farPaint"); } // (only when souls have moved, been called or left)
   ctx.drawImage(farCv, 0, 0, W, H); // far souls: painted, like the nearer ones
+  if (goldCount) { ctx.globalAlpha = 0.75 + 0.25 * Math.sin(now * 9); ctx.drawImage(goldCv, 0, 0, W, H); ctx.globalAlpha = 1; } // called: pulsing
+  mark("farAdd");
   if (farArrivals.length) drawArrivals(farArrivals, t);
   const soul = (s) => {
     standAt(s); project(gx, gz, ground(gz) + 0.2 + 0.05 * Math.sin(t * 1.7 + s.id * 1.3));
     drawSoul(sx, sy, sS, s, t, s.st === 2);
   };
   prepareImages(t);
+  mark("images");
   inOrder(mids, midSoul, t);
+  mark("mids");
   if (frameNo % 60 === 0) sweepImages();
   if (liftOffs.size) sweepLiftOffs();
   if (leavers.length) drawLeavers(t, false);
   ctx.drawImage(pier, 0, 0, W, H);
   drawPools(nears); drawPools(nears, true);
+  mark("pier");
   inOrder(nears, soul, t);
+  mark("nears");
   if (leavers.length) drawLeavers(t, true);
   if (block) drawGhostFerry(t);
-  if (flyers.length) streaks(flyers, flightPos, 0.05, "255,214,140", flightWisp, t);
+  if (flyers.length) { streaks(flyers, flightPos, 0.05, "255,214,140", flightWisp, t); mark("flights"); }
   if (block && block.tally && !block.test) { ctx.globalAlpha = ferryAlpha(now); drawTally(); ctx.globalAlpha = 1; } // a test boat has nobody to count
   if (picked) showPicked(t);
   const v = ctx.createRadialGradient(W / 2, H * 0.55, Math.min(W, H) * 0.4, W / 2, H * 0.55, Math.max(W, H) * 0.8);
@@ -2171,6 +2252,7 @@ function draw() {
     if (stress && !block) text += ` · next block in ${Math.max(0, Math.ceil(nextBlockAt - now))} s`;
     if (text !== lastText) countEl.textContent = lastText = text;
   }
+  mark("rest");
 }
 
 // The scene keeps to the clock in a background tab too, so on coming back there's nothing left to catch up on.
@@ -2180,9 +2262,30 @@ function draw() {
 // slows the scene for a moment rather than jumping it.
 let lastTs = 0;
 const frameMs = []; let frameCount = 0; // (studio diagnostics) the work each recent frame took; frames so far
+// test (#fpslog): every half second, the frames drawn, the longest gap between them, and how many souls are in
+// line and flying, logged to the console (for browsers driven without devtools)
+const fpsLog = /fpslog/.test(location.hash) ? { t: 0, n: 0, max: 0, last: 0 } : null;
+// ...and how long each part of the frame took (ms per frame, averaged over the half second): mark(name) after a part
+const partMs = {};
+let markT = 0;
+const mark = (name) => { if (!fpsLog) return; const t = performance.now(); partMs[name] = (partMs[name] || 0) + t - markT; markT = t; };
+function logFps(ts) {
+  const L = fpsLog;
+  if (L.last) { L.n++; L.max = Math.max(L.max, ts - L.last); }
+  L.last = ts;
+  if (!L.t) L.t = ts;
+  if (ts - L.t >= 500) {
+    const parts = Object.entries(partMs).map(([k, v]) => `${k} ${(v / Math.max(1, L.n)).toFixed(1)}`).join(", ");
+    console.log(`fpslog ${(now).toFixed(1)} s: ${2 * L.n} fps, longest frame ${L.max.toFixed(0)} ms, line ${line.length}, flying ${flyers.length}${flyers.length ? " (" + flyCounts + ")" : ""} | cap ${cap}, mid ${mids.length}, near ${nears.length} | ms/frame: ${parts}`);
+    L.t = ts; L.n = 0; L.max = 0; for (const k in partMs) delete partMs[k];
+  }
+}
 function frame(ts) {
+  if (fpsLog) logFps(ts);
   const t0 = performance.now();
+  markT = t0;
   step(clamp(lastTs ? (ts - lastTs) / 1000 : 0, 0, 0.05));
+  mark("step");
   lastTs = Math.max(lastTs, ts);
   draw();
   frameMs.push(performance.now() - t0); frameCount++;
@@ -2209,6 +2312,8 @@ function resize() {
   trailCv = document.createElement("canvas"); trailCv.width = cv.width; trailCv.height = cv.height;
   trailCtx = trailCv.getContext("2d"); trailCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
   farCtx = farCv.getContext("2d"); farCtx.setTransform(DPR, 0, 0, DPR, 0, 0); farCtx.globalCompositeOperation = "lighter";
+  goldCv = document.createElement("canvas"); goldCv.width = cv.width; goldCv.height = cv.height;
+  goldCtx = goldCv.getContext("2d"); goldCtx.setTransform(DPR, 0, 0, DPR, 0, 0); goldCtx.globalCompositeOperation = "lighter";
   farDirty = true; atlasReset();
   buildPath(); renderBg(); renderPier();
   for (let i = 0; i < line.length; i++) { locate(i); line[i].x = gx; line[i].z = gz; } // places moved: everyone straight to theirs
@@ -2392,7 +2497,8 @@ if (stress) { // starts with an empty beach; the first full block comes after on
   ctl("add").onclick = () => { for (let i = 0; i < 1000; i++) addMadeUp(randomFee(), rnd() * 1.5, false); };
   ctl("cut").onclick = () => addMadeUp(5 + 45 * rnd(), 0, true);
   sonifier.hello({ now: Date.now() / 1000, events: [] });
-  for (let i = 0; i < START_SOULS; i++) addMadeUp(randomFee(), -1, false);
+  for (let i = 0; i < START_SOULS + (shotBig ? +shotBig[1] : 0) + (shotStanding ? +shotStanding[1] : 0); i++) addMadeUp(randomFee(), -1, false);
+  if (shotBig) nextBlockAt = 1; else if (shotBurst || shotStanding) nextBlockAt = Infinity; // (tests: no blocks but the one asked for)
   feedEl.textContent = "made-up traffic";
 } else if (source === "none") {
   sonifier.hello({ now: Date.now() / 1000, events: [] });
@@ -2406,6 +2512,16 @@ if (stress) { // starts with an empty beach; the first full block comes after on
 }
 if (!synthetic) for (const id of ["mine", "add", "cut"]) ctl(id).hidden = true; // only for made-up traffic
 
+// n made-up transactions at once (through the live path when live: sound, drop and all)
+function burst(n) {
+  for (let i = 0; i < n; i++) {
+    const tx = madeUpTx(randomFee());
+    tx.txid = `synthetic-burst-${nextId}-${i}`;
+    if (synthetic) { addSoul(tx.fee / tx.size, 0, tx); sonifier.event(tx); }
+    else { sonifier.event(tx); liveFeed.event(tx); }
+  }
+}
+
 // Studio diagnostics: how hard the page is working (the readout, and window.__diag() for tests), and a burst of
 // 500 made-up transactions at once (through the live path when live: sound, drop and all).
 if (studio) {
@@ -2418,7 +2534,8 @@ if (studio) {
     if (drift != null && clock0 == null) clock0 = drift;
     return {
       fps: frames, frameAvg: ms.reduce((a, b) => a + b, 0) / ms.length, frameMax: Math.max(...ms),
-      line: line.length, falling: arrivals.length, flying: flyers.length,
+      line: line.length, places: cap, falling: arrivals.length, flying: flyers.length,
+      aboard: block ? block.aboard : 0, beyond: block && block.beyond ? block.beyond.length : 0, beyondShown: block && block.beyond ? block.beyondNext : 0, now,
       notes: sonifier.voices.size, oscillators: osc, waves: sonifier.waves ? sonifier.waves.waves.length : 0,
       audio: ctxA ? ctxA.state : "none", driftMs: drift == null || clock0 == null ? null : (drift - clock0) * 1000,
       hidden: document.hidden, radio: !!(radio && radio.on && !radio.audio.paused),
@@ -2434,14 +2551,7 @@ if (studio) {
       `${d.preDrawn} souls pre-drawn (${d.atlasPages} atlas pages, ${d.atlasMB.toFixed(0)} MB) · ` +
       `${d.notes} notes, ${d.oscillators} oscillators · ${d.waves} waves queued · audio ${d.audio}` + (d.driftMs != null ? `, clock drift ${d.driftMs.toFixed(0)} ms` : "");
   }, 1000);
-  ctl("burst").onclick = () => {
-    for (let i = 0; i < 500; i++) {
-      const tx = madeUpTx(randomFee());
-      tx.txid = `synthetic-burst-${nextId}-${i}`;
-      if (synthetic) { addSoul(tx.fee / tx.size, 0, tx); sonifier.event(tx); }
-      else { sonifier.event(tx); liveFeed.event(tx); }
-    }
-  };
+  ctl("burst").onclick = () => burst(500);
 }
 const sourceSel = ctl("source");
 sourceSel.value = source;
